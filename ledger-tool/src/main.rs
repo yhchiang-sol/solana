@@ -44,9 +44,18 @@ use {
     },
     solana_measure::{measure, measure::Measure},
     solana_runtime::{
+        account_storage::meta::StoredAccountMeta,
         accounts::Accounts,
-        accounts_db::CalcAccountsHashDataSource,
-        accounts_index::ScanConfig,
+        accounts_background_service::{
+            AbsRequestHandlers, AbsRequestSender, AccountsBackgroundService,
+            PrunedBanksRequestHandler, SnapshotRequestHandler,
+        },
+        accounts_db::{
+            AccountsDb, AccountsDbConfig, CalcAccountsHashDataSource, FillerAccountsConfig,
+        },
+        accounts_index::{AccountsIndexConfig, IndexLimitMb, ScanConfig},
+        accounts_update_notifier_interface::AccountsUpdateNotifier,
+        append_vec::AppendVec,
         bank::{Bank, RewardCalculationEvent, TotalAccountsStats},
         bank_forks::BankForks,
         cost_model::CostModel,
@@ -59,6 +68,7 @@ use {
             self, ArchiveFormat, SnapshotVersion, DEFAULT_ARCHIVE_COMPRESSION,
             SUPPORTED_ARCHIVE_COMPRESSION,
         },
+        tiered_storage::{hot::HOT_FORMAT, TieredStorage},
     },
     solana_sdk::{
         account::{AccountSharedData, ReadableAccount, WritableAccount},
@@ -4060,6 +4070,8 @@ fn main() {
             }
             ("program", Some(arg_matches)) => {
                 program(&ledger_path, arg_matches);
+            ("run", Some(arg_matches)) => {
+                run(&ledger_path, arg_matches);
             }
             ("", _) => {
                 eprintln!("{}", matches.usage());
