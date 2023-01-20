@@ -104,6 +104,15 @@ pub enum AccountIndexFormat {
     LinearIndex = 1,
 }
 
+#[derive(Debug)]
+pub struct TieredFileFormat {
+    pub meta_entry_size: usize,
+    pub account_meta_format: AccountMetaFormat,
+    pub owners_block_format: OwnersBlockFormat,
+    pub account_index_format: AccountIndexFormat,
+    pub account_block_format: AccountBlockFormat,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(C)]
 pub struct TieredStorageFooter {

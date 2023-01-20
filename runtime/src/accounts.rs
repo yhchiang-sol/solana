@@ -1624,6 +1624,7 @@ mod tests {
             None,
             &HashMap::new(),
             &LoadedProgramsForTxBatch::default(),
+            true, // TODO(yhchiang): set_exempt_rent_epoch_max
         )
     }
 
@@ -3428,6 +3429,7 @@ mod tests {
             account_overrides,
             &HashMap::new(),
             &LoadedProgramsForTxBatch::default(),
+            true, // TODO(yhchiang): set_exempt_rent_epoch_max
         )
     }
 

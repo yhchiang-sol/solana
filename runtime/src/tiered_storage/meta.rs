@@ -2,7 +2,7 @@ use {
     crate::{
         account_storage::meta::StoredMetaWriteVersion,
         tiered_storage::{
-            file::TieredStorageFile, footer::TieredStorageFooter, AccountDataBlockWriter,
+            file::TieredStorageFile, footer::TieredStorageFooter, AccountBlockWriter,
         },
     },
     ::solana_sdk::{hash::Hash, stake_history::Epoch},
@@ -117,7 +117,7 @@ impl AccountMetaOptionalFields {
         size_in_bytes
     }
 
-    pub fn write(&self, writer: &mut AccountDataBlockWriter) -> std::io::Result<usize> {
+    pub fn write(&self, writer: &mut AccountBlockWriter) -> std::io::Result<usize> {
         let mut length = 0;
         if let Some(rent_epoch) = self.rent_epoch {
             length += writer.write_type(&rent_epoch)?;
