@@ -66,6 +66,7 @@ use {
         snapshot_utils::create_accounts_run_and_snapshot_dirs,
         sorted_storages::SortedStorages,
         storable_accounts::StorableAccounts,
+        tiered_storage::TieredStorage,
         verify_accounts_hash_in_background::VerifyAccountsHashInBackground,
     },
     blake3::traits::digest::Digest,
@@ -1034,9 +1035,29 @@ pub struct AccountStorageEntry {
 
 impl AccountStorageEntry {
     pub fn new(path: &Path, slot: Slot, id: AppendVecId, file_size: u64) -> Self {
+        Self::new_cold(path, slot, id, file_size)
+    }
+
+    pub fn new_av(path: &Path, slot: Slot, id: AppendVecId, file_size: u64) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
         let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+
+        Self {
+            id: AtomicAppendVecId::new(id),
+            slot: AtomicU64::new(slot),
+            accounts,
+            count_and_status: RwLock::new((0, AccountStorageStatus::Available)),
+            approx_store_count: AtomicUsize::new(0),
+            alive_bytes: AtomicUsize::new(0),
+        }
+    }
+
+    pub fn new_cold(path: &Path, slot: Slot, id: AppendVecId, _file_size: u64) -> Self {
+        let tail = AccountsFile::file_name(slot, id);
+        let path = Path::new(path).join(tail);
+        let accounts = AccountsFile::Cold(TieredStorage::new(&path, true));
+        info!("YH: Create new cold storage at path {:?}", path);
 
         Self {
             id: AtomicAppendVecId::new(id),

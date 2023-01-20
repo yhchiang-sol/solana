@@ -5,6 +5,7 @@ use {
         },
         append_vec::{AppendVec, MatchAccountOwnerError},
         storable_accounts::StorableAccounts,
+        tiered_storage::TieredStorage,
     },
     solana_sdk::{account::ReadableAccount, clock::Slot, hash::Hash, pubkey::Pubkey},
     std::{
@@ -29,6 +30,7 @@ macro_rules! u64_align {
 /// under different formats.
 pub enum AccountsFile {
     AppendVec(AppendVec),
+    Cold(TieredStorage),
 }
 
 impl AccountsFile {
@@ -37,8 +39,17 @@ impl AccountsFile {
     /// The second element of the returned tuple is the number of accounts in the
     /// accounts file.
     pub fn new_from_file(path: impl AsRef<Path>, current_len: usize) -> io::Result<(Self, usize)> {
-        let (av, num_accounts) = AppendVec::new_from_file(path, current_len)?;
+        if let Ok((ts, num_accounts)) = TieredStorage::new_from_file(path.as_ref()) {
+            log::info!("YH: Open {:?} as cold storage", path.as_ref());
+            return Ok((Self::Cold(ts), num_accounts));
+        }
+
+        let (av, num_accounts) = AppendVec::new_from_file(path.as_ref(), current_len)?;
         Ok((Self::AppendVec(av), num_accounts))
+    }
+
+    pub fn new_cold_entry(file_path: &Path, create: bool) -> Self {
+        Self::Cold(TieredStorage::new(file_path, create))
     }
 
     /// By default, all AccountsFile will remove its underlying file on
@@ -47,42 +58,49 @@ impl AccountsFile {
     pub fn set_no_remove_on_drop(&mut self) {
         match self {
             Self::AppendVec(av) => av.set_no_remove_on_drop(),
+            Self::Cold(ts) => ts.set_no_remove_on_drop(),
         }
     }
 
     pub fn flush(&self) -> io::Result<()> {
         match self {
             Self::AppendVec(av) => av.flush(),
+            Self::Cold(..) => Ok(()),
         }
     }
 
     pub fn reset(&self) {
         match self {
             Self::AppendVec(av) => av.reset(),
+            Self::Cold(..) => {}
         }
     }
 
     pub fn remaining_bytes(&self) -> u64 {
         match self {
             Self::AppendVec(av) => av.remaining_bytes(),
+            Self::Cold(ts) => ts.remaining_bytes(),
         }
     }
 
     pub fn len(&self) -> usize {
         match self {
             Self::AppendVec(av) => av.len(),
+            Self::Cold(ts) => ts.len(),
         }
     }
 
     pub fn is_empty(&self) -> bool {
         match self {
             Self::AppendVec(av) => av.is_empty(),
+            Self::Cold(ts) => ts.is_empty(),
         }
     }
 
     pub fn capacity(&self) -> u64 {
         match self {
             Self::AppendVec(av) => av.capacity(),
+            Self::Cold(ts) => ts.capacity(),
         }
     }
 
@@ -96,6 +114,7 @@ impl AccountsFile {
     pub fn get_account(&self, index: usize) -> Option<(StoredAccountMeta<'_>, usize)> {
         match self {
             Self::AppendVec(av) => av.get_account(index),
+            Self::Cold(ts) => ts.get_account(index),
         }
     }
 
@@ -106,6 +125,7 @@ impl AccountsFile {
     ) -> Result<usize, MatchAccountOwnerError> {
         match self {
             Self::AppendVec(av) => av.account_matches_owners(offset, owners),
+            Self::Cold(ts) => ts.account_matches_owners(offset, owners),
         }
     }
 
@@ -113,6 +133,7 @@ impl AccountsFile {
     pub fn get_path(&self) -> PathBuf {
         match self {
             Self::AppendVec(av) => av.get_path(),
+            Self::Cold(ts) => ts.get_path(),
         }
     }
 
@@ -125,6 +146,7 @@ impl AccountsFile {
     pub fn accounts(&self, offset: usize) -> Vec<StoredAccountMeta> {
         match self {
             Self::AppendVec(av) => av.accounts(offset),
+            Self::Cold(ts) => ts.accounts(offset),
         }
     }
 
@@ -148,6 +170,7 @@ impl AccountsFile {
     ) -> Option<Vec<StoredAccountInfo>> {
         match self {
             Self::AppendVec(av) => av.append_accounts(accounts, skip),
+            Self::Cold(ts) => ts.append_accounts(accounts, skip),
         }
     }
 }
@@ -186,6 +209,7 @@ pub mod tests {
         pub(crate) fn set_current_len_for_tests(&self, len: usize) {
             match self {
                 Self::AppendVec(av) => av.set_current_len_for_tests(len),
+                Self::Cold(..) => todo!(),
             }
         }
     }
