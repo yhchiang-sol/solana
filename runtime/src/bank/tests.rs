@@ -11335,7 +11335,7 @@ fn test_rent_state_list_len() {
         None,
         &HashMap::new(),
         &LoadedProgramsForTxBatch::default(),
-        true,
+        true,  // set_exempt_rent_epoch_max
     );
 
     let compute_budget = bank.runtime_config.compute_budget.unwrap_or_else(|| {

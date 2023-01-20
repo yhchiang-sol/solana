@@ -44,9 +44,18 @@ use {
     },
     solana_measure::{measure, measure::Measure},
     solana_runtime::{
+        account_storage::meta::StoredAccountMeta,
         accounts::Accounts,
-        accounts_db::CalcAccountsHashDataSource,
-        accounts_index::ScanConfig,
+        accounts_background_service::{
+            AbsRequestHandlers, AbsRequestSender, AccountsBackgroundService,
+            PrunedBanksRequestHandler, SnapshotRequestHandler,
+        },
+        accounts_db::{
+            AccountsDb, AccountsDbConfig, CalcAccountsHashDataSource, FillerAccountsConfig,
+        },
+        accounts_index::{AccountsIndexConfig, IndexLimitMb, ScanConfig},
+        accounts_update_notifier_interface::AccountsUpdateNotifier,
+        append_vec::AppendVec,
         bank::{Bank, RewardCalculationEvent, TotalAccountsStats},
         bank_forks::BankForks,
         cost_model::CostModel,
@@ -59,6 +68,7 @@ use {
             self, ArchiveFormat, SnapshotVersion, DEFAULT_ARCHIVE_COMPRESSION,
             SUPPORTED_ARCHIVE_COMPRESSION,
         },
+        tiered_storage::{hot::HOT_FORMAT, TieredStorage},
     },
     solana_sdk::{
         account::{AccountSharedData, ReadableAccount, WritableAccount},
@@ -2026,6 +2036,24 @@ fn main() {
                     .value_name("SST_FILE_NAME")
                     .help("The ledger file name (e.g. 011080.sst.) \
                            If no file name is specified, it will print the metadata of all ledger files.")
+            )
+        )
+        .subcommand(
+            SubCommand::with_name("new_ads_file")
+            .about("Create a new accounts-data-storage file from an existing append_vec file.")
+            .arg(
+                Arg::with_name("append_vec")
+                    .long("append-vec")
+                    .takes_value(true)
+                    .value_name("APPEND_VEC_FILE_NAME")
+                    .help("The name of the append vec file.")
+            )
+            .arg(
+                Arg::with_name("ads_file_name")
+                    .long("ads-file-name")
+                    .takes_value(true)
+                    .value_name("ADS_FILE_NAME")
+                    .help("The name of the output ads file.")
             )
         )
         .run_subcommand()
@@ -4057,6 +4085,59 @@ fn main() {
                 if let Err(err) = print_blockstore_file_metadata(&blockstore, &sst_file_name) {
                     eprintln!("{err}");
                 }
+            }
+            ("new_ads_file", Some(arg_matches)) => {
+                let append_vec_path = value_t_or_exit!(arg_matches, "append_vec", String);
+                let ads_file_path =
+                    PathBuf::from(value_t_or_exit!(arg_matches, "ads_file_name", String));
+                let append_vec_len = std::fs::metadata(&append_vec_path).unwrap().len() as usize;
+                let mut append_vec =
+                    AppendVec::new_from_file_unchecked(append_vec_path, append_vec_len)
+                        .expect("should succeed");
+                append_vec.set_no_remove_on_drop();
+
+                let mut ads = TieredStorage::new(&ads_file_path, Some(&HOT_FORMAT));
+                ads.set_no_remove_on_drop();
+                ads.write_from_append_vec(&append_vec).unwrap();
+
+                // read append-vec
+                let mut num_accounts = 0;
+                let mut offset = 0;
+                let mut account_map: HashMap<Pubkey, StoredAccountMeta> = HashMap::new();
+                while let Some((account, next_offset)) = append_vec.get_account(offset) {
+                    offset = next_offset;
+                    num_accounts += 1;
+                    account_map.insert(*account.pubkey(), account);
+                }
+
+                // iterate through all accounts in the tiered storage and
+                // verify their correctness.
+                offset = 0;
+                let mut tiered_num_accounts = 0;
+                while let Some((account, next_offset)) = ads.get_account(offset) {
+                    tiered_num_accounts += 1;
+                    offset = next_offset;
+                    if *account.pubkey() == Pubkey::default() {
+                        continue;
+                    }
+                    if *account.owner() == Pubkey::default() {
+                        continue;
+                    }
+                    let av_account = &account_map[account.pubkey()];
+                    assert_eq!(*av_account.pubkey(), *account.pubkey());
+                    assert_eq!(*av_account.hash(), *account.hash());
+                    assert_eq!(av_account.data_len(), account.data_len());
+                    assert_eq!(av_account.write_version(), account.write_version());
+
+                    assert_eq!(av_account.lamports(), account.lamports());
+                    assert_eq!(av_account.data(), account.data());
+                    assert_eq!(*av_account.owner(), *account.owner());
+                    assert_eq!(av_account.rent_epoch(), account.rent_epoch());
+                    assert_eq!(av_account.executable(), account.executable());
+                }
+                assert_eq!(num_accounts, tiered_num_accounts);
+
+                info!("# accounts from append_vec = {:?}", num_accounts);
             }
             ("run", Some(arg_matches)) => {
                 run(&ledger_path, arg_matches);
