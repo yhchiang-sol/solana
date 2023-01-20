@@ -6,7 +6,8 @@ use {
             AccountMeta, StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo,
             StoredAccountMeta, StoredMeta,
         },
-        append_vec::{AppendVec, AppendVecStoredAccountMeta, ALIGN_BOUNDARY_OFFSET},
+        accounts_file::ALIGN_BOUNDARY_OFFSET,
+        append_vec::{AppendVec, AppendVecStoredAccountMeta},
         storable_accounts::StorableAccounts,
         tiered_storage::{
             data_block::{AccountDataBlockFormat, AccountDataBlockWriter},

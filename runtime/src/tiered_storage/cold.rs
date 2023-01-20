@@ -1,7 +1,8 @@
 use {
     crate::{
         account_storage::meta::{StoredAccountMeta},
-        append_vec::{MatchAccountOwnerError, ALIGN_BOUNDARY_OFFSET},
+        accounts_file::ALIGN_BOUNDARY_OFFSET,
+        append_vec::MatchAccountOwnerError,
         tiered_storage::{
             data_block::{AccountDataBlock, AccountDataBlockFormat},
             file::TieredStorageFile,
