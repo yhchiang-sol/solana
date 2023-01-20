@@ -489,7 +489,7 @@ pub mod tests {
         };
 
         let mut expected_entry = ColdAccountMeta::new();
-        let mut flags = AccountMetaFlags::from(&optional_fields);
+        let mut flags = AccountMetaFlags::new_from(&optional_fields);
         flags.set_executable(true);
         expected_entry
             .with_lamports(TEST_LAMPORT)
