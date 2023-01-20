@@ -68,14 +68,15 @@ impl AccountStorage {
     }
 
     /// assert if shrink in progress is active
-    pub(crate) fn assert_no_shrink_in_progress(&self) {
+    pub(crate) fn no_shrink_in_progress(&self) -> bool {
         assert!(self.shrink_in_progress_map.is_empty());
+        self.shrink_in_progress_map.is_empty()
     }
 
     /// return the append vec for 'slot' if it exists
     /// This is only ever called when shrink is not possibly running and there is a max of 1 append vec per slot.
     pub(crate) fn get_slot_storage_entry(&self, slot: Slot) -> Option<Arc<AccountStorageEntry>> {
-        self.assert_no_shrink_in_progress();
+        assert!(self.no_shrink_in_progress());
         self.get_slot_storage_entry_shrinking_in_progress_ok(slot)
     }
 
@@ -88,21 +89,21 @@ impl AccountStorage {
     }
 
     pub(crate) fn all_slots(&self) -> Vec<Slot> {
-        self.assert_no_shrink_in_progress();
+        assert!(self.no_shrink_in_progress());
         self.map.iter().map(|iter_item| *iter_item.key()).collect()
     }
 
     /// returns true if there is no entry for 'slot'
     #[cfg(test)]
     pub(crate) fn is_empty_entry(&self, slot: Slot) -> bool {
-        self.assert_no_shrink_in_progress();
+        assert!(self.no_shrink_in_progress());
         self.map.get(&slot).is_none()
     }
 
     /// initialize the storage map to 'all_storages'
     pub(crate) fn initialize(&mut self, all_storages: AccountStorageMap) {
         assert!(self.map.is_empty());
-        self.assert_no_shrink_in_progress();
+        assert!(self.no_shrink_in_progress());
         self.map.extend(all_storages.into_iter())
     }
 
@@ -119,12 +120,12 @@ impl AccountStorage {
 
     /// iterate through all (slot, append-vec)
     pub(crate) fn iter(&self) -> AccountStorageIter<'_> {
-        self.assert_no_shrink_in_progress();
+        assert!(self.no_shrink_in_progress());
         AccountStorageIter::new(self)
     }
 
     pub(crate) fn insert(&self, slot: Slot, store: Arc<AccountStorageEntry>) {
-        self.assert_no_shrink_in_progress();
+        assert!(self.no_shrink_in_progress());
         assert!(self
             .map
             .insert(
@@ -270,6 +271,8 @@ pub(crate) mod tests {
     use {super::*, std::path::Path};
 
     #[test]
+    /// The new cold storage will fail this test as it does not have
+    /// the concept of capacity yet.
     fn test_shrink_in_progress() {
         // test that we check in order map then shrink_in_progress_map
         let storage = AccountStorage::default();
@@ -283,13 +286,13 @@ pub(crate) mod tests {
         let store_file_size = 4000;
         let store_file_size2 = store_file_size * 2;
         // 2 append vecs with same id, but different sizes
-        let entry = Arc::new(AccountStorageEntry::new(
+        let entry = Arc::new(AccountStorageEntry::new_av(
             common_store_path,
             slot,
             id,
             store_file_size,
         ));
-        let entry2 = Arc::new(AccountStorageEntry::new(
+        let entry2 = Arc::new(AccountStorageEntry::new_av(
             common_store_path,
             slot,
             id,
