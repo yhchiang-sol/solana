@@ -1,10 +1,10 @@
 use {
     crate::{
         account_storage::meta::{StoredAccountMeta, StoredMeta, StoredMetaWriteVersion},
-        append_vec::{MatchAccountOwnerError},
+        append_vec::MatchAccountOwnerError,
         tiered_storage::{
-            cold::ColdStorageReader,
-            meta_entries::{AccountMetaFlags, AccountMetaStorageEntry},
+            cold::{ColdAccountMeta, ColdStorageReader},
+            meta_entries::{AccountMetaFlags, TieredAccountMeta},
         },
     },
     solana_sdk::{
@@ -19,13 +19,6 @@ use {
 #[derive(Debug)]
 pub enum TieredStorageReader {
     Cold(ColdStorageReader),
-    /*
-    pub(crate) footer: TieredStorageFooter,
-    pub(crate) metas: Vec<AccountMetaStorageEntry>,
-    pub(crate) accounts: Vec<Pubkey>,
-    pub(crate) owners: Vec<Pubkey>,
-    pub(crate) data_blocks: HashMap<u64, Vec<u8>>,
-    */
 }
 
 impl TieredStorageReader {
@@ -62,8 +55,8 @@ impl TieredStorageReader {
 
 #[derive(PartialEq, Eq, Debug)]
 #[allow(dead_code)]
-pub struct TieredAccountMeta<'a> {
-    pub(crate) meta: &'a AccountMetaStorageEntry,
+pub struct TieredStoredAccountMeta<'a> {
+    pub(crate) meta: &'a ColdAccountMeta,
     pub(crate) pubkey: &'a Pubkey,
     pub(crate) owner: &'a Pubkey,
     pub(crate) index: usize,
@@ -72,7 +65,7 @@ pub struct TieredAccountMeta<'a> {
 }
 
 #[allow(dead_code)]
-impl<'a> TieredAccountMeta<'a> {
+impl<'a> TieredStoredAccountMeta<'a> {
     pub fn pubkey(&self) -> &'a Pubkey {
         &self.pubkey
     }
@@ -95,7 +88,7 @@ impl<'a> TieredAccountMeta<'a> {
 
     pub fn stored_size(&self) -> usize {
         self.data_len() as usize / 2
-            + std::mem::size_of::<AccountMetaStorageEntry>()
+            + std::mem::size_of::<ColdAccountMeta>()
             + std::mem::size_of::<Pubkey>() // account's pubkey
             + std::mem::size_of::<Pubkey>() // owner's pubkey
     }
@@ -133,7 +126,7 @@ impl<'a> TieredAccountMeta<'a> {
     }
 }
 
-impl<'a> ReadableAccount for TieredAccountMeta<'a> {
+impl<'a> ReadableAccount for TieredStoredAccountMeta<'a> {
     fn lamports(&self) -> u64 {
         self.meta.lamports()
     }

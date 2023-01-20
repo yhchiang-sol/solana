@@ -6,14 +6,16 @@ use {
             AccountMeta, StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo,
             StoredAccountMeta, StoredMeta,
         },
-        append_vec::{AppendVec, AppendVecStoredAccountMeta, ALIGN_BOUNDARY_OFFSET},
+        accounts_file::ALIGN_BOUNDARY_OFFSET,
+        append_vec::{AppendVec, AppendVecStoredAccountMeta},
         storable_accounts::StorableAccounts,
         tiered_storage::{
+            cold::ColdAccountMeta,
             data_block::{AccountDataBlockFormat, AccountDataBlockWriter},
             file::TieredStorageFile,
             footer::TieredStorageFooter,
             meta_entries::{
-                AccountMetaFlags, AccountMetaOptionalFields, AccountMetaStorageEntry,
+                AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta,
                 ACCOUNT_DATA_ENTIRE_BLOCK, ACCOUNT_META_ENTRY_SIZE_BYTES,
             },
         },
@@ -82,7 +84,7 @@ impl TieredStorageWriter {
         let mut footer = TieredStorageFooter::new();
         footer.format_version = ACCOUNTS_DATA_STORAGE_FORMAT_VERSION;
         let mut cursor = 0;
-        let mut account_metas: Vec<AccountMetaStorageEntry> = vec![];
+        let mut account_metas: Vec<ColdAccountMeta> = vec![];
         let mut account_pubkeys: Vec<Pubkey> = vec![];
         let mut owners_table = AccountOwnerTable::new();
         let mut dummy_hash: Hash = Hash::new_unique();
@@ -90,7 +92,7 @@ impl TieredStorageWriter {
         let mut data_block_writer = self.new_data_block_writer();
         footer.account_data_block_size = ACCOUNT_DATA_BLOCK_SIZE as u64;
 
-        let mut buffered_account_metas: Vec<AccountMetaStorageEntry> = vec![];
+        let mut buffered_account_metas: Vec<ColdAccountMeta> = vec![];
         let mut buffered_account_pubkeys: Vec<Pubkey> = vec![];
 
         let len = accounts.accounts.len();
@@ -186,7 +188,7 @@ impl TieredStorageWriter {
             // instead of offset.
             stored_accounts_info[*index].offset = i * ALIGN_BOUNDARY_OFFSET;
             stored_accounts_info[*index].size =
-                AccountMetaStorageEntry::stored_size(&footer, &account_metas, i);
+                ColdAccountMeta::stored_size(&footer, &account_metas, i);
         }
 
         Some(stored_accounts_info)
@@ -200,7 +202,7 @@ impl TieredStorageWriter {
         &self,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
-        account_metas: &Vec<AccountMetaStorageEntry>,
+        account_metas: &Vec<ColdAccountMeta>,
     ) -> std::io::Result<()> {
         let entry_size = ACCOUNT_META_ENTRY_SIZE_BYTES;
         footer.account_metas_offset = *cursor;
@@ -253,9 +255,9 @@ impl TieredStorageWriter {
         &self,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
-        account_metas: &mut Vec<AccountMetaStorageEntry>,
+        account_metas: &mut Vec<ColdAccountMeta>,
         account_pubkeys: &mut Vec<Pubkey>,
-        input_metas: &mut Vec<AccountMetaStorageEntry>,
+        input_metas: &mut Vec<ColdAccountMeta>,
         input_pubkeys: &mut Vec<Pubkey>,
         data_block_writer: AccountDataBlockWriter,
     ) -> std::io::Result<()> {
@@ -287,11 +289,11 @@ impl TieredStorageWriter {
         account: &StoredAccountMeta,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
-        account_metas: &mut Vec<AccountMetaStorageEntry>,
+        account_metas: &mut Vec<ColdAccountMeta>,
         account_pubkeys: &mut Vec<Pubkey>,
         owners_table: &mut AccountOwnerTable,
         mut data_block: AccountDataBlockWriter,
-        buffered_account_metas: &mut Vec<AccountMetaStorageEntry>,
+        buffered_account_metas: &mut Vec<ColdAccountMeta>,
         buffered_account_pubkeys: &mut Vec<Pubkey>,
         _hash: &mut Hash,
     ) -> std::io::Result<AccountDataBlockWriter> {
@@ -341,7 +343,7 @@ impl TieredStorageWriter {
         optional_fields.write(&mut data_block)?;
 
         buffered_account_metas.push(
-            AccountMetaStorageEntry::new()
+            ColdAccountMeta::new()
                 .with_lamports(account.lamports())
                 .with_block_offset(*cursor)
                 .with_owner_local_id(owner_local_id)
@@ -363,7 +365,7 @@ impl TieredStorageWriter {
         &self,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
-        account_metas: &mut Vec<AccountMetaStorageEntry>,
+        account_metas: &mut Vec<ColdAccountMeta>,
         account_pubkeys: &mut Vec<Pubkey>,
         owners_table: &mut AccountOwnerTable,
         account: &StoredAccountMeta,
@@ -384,7 +386,7 @@ impl TieredStorageWriter {
         self.storage.write_bytes(&data)?;
 
         account_metas.push(
-            AccountMetaStorageEntry::new()
+            ColdAccountMeta::new()
                 .with_lamports(account.lamports())
                 .with_block_offset(*cursor)
                 .with_owner_local_id(owner_local_id)
@@ -412,7 +414,7 @@ impl TieredStorageWriter {
         let mut footer = TieredStorageFooter::new();
         footer.format_version = ACCOUNTS_DATA_STORAGE_FORMAT_VERSION;
         let mut cursor = 0;
-        let mut account_metas: Vec<AccountMetaStorageEntry> = vec![];
+        let mut account_metas: Vec<ColdAccountMeta> = vec![];
         let mut account_pubkeys: Vec<Pubkey> = vec![];
         let mut owners_table = AccountOwnerTable::new();
         let mut hash: Hash = Hash::new_unique();
@@ -442,7 +444,7 @@ impl TieredStorageWriter {
         &self,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
-        account_metas: &mut Vec<AccountMetaStorageEntry>,
+        account_metas: &mut Vec<ColdAccountMeta>,
         account_pubkeys: &mut Vec<Pubkey>,
         owners_table: &mut AccountOwnerTable,
         // TODO(yhchiang): update hash
@@ -452,7 +454,7 @@ impl TieredStorageWriter {
         let mut offset = 0;
         footer.account_data_block_size = ACCOUNT_DATA_BLOCK_SIZE as u64;
 
-        let mut buffered_account_metas: Vec<AccountMetaStorageEntry> = vec![];
+        let mut buffered_account_metas: Vec<ColdAccountMeta> = vec![];
         let mut buffered_account_pubkeys: Vec<Pubkey> = vec![];
         let mut data_block_writer = self.new_data_block_writer();
 
