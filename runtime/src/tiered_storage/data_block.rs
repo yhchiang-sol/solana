@@ -1,29 +1,10 @@
 use {
-    serde::{Deserialize, Serialize},
+    crate::tiered_storage::footer::AccountDataBlockFormat,
     std::{
         io::{Cursor, Error, Read, Write},
         mem,
     },
 };
-
-#[repr(u64)]
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Eq,
-    Hash,
-    PartialEq,
-    Deserialize,
-    num_enum::IntoPrimitive,
-    Serialize,
-    num_enum::TryFromPrimitive,
-)]
-#[serde(into = "u64", try_from = "u64")]
-pub enum AccountDataBlockFormat {
-    AlignedRaw = 0u64,
-    Lz4 = 1u64,
-}
 
 enum AccountDataBlockEncoder {
     Raw(Cursor<Vec<u8>>),

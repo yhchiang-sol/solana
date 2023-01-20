@@ -1,7 +1,7 @@
 use {
     crate::{
         append_vec::AppendVecStoredAccountMeta, storable_accounts::StorableAccounts,
-        tiered_storage::reader::TieredAccountMeta,
+        tiered_storage::reader::TieredStoredAccountMeta,
     },
     solana_sdk::{
         account::{AccountSharedData, ReadableAccount},
@@ -108,7 +108,7 @@ impl<'a: 'b, 'b, T: ReadableAccount + Sync + 'b, U: StorableAccounts<'a, T>, V: 
 #[derive(PartialEq, Eq, Debug)]
 pub enum StoredAccountMeta<'a> {
     AppendVec(AppendVecStoredAccountMeta<'a>),
-    Tiered(TieredAccountMeta<'a>),
+    Tiered(TieredStoredAccountMeta<'a>),
 }
 
 impl<'a> StoredAccountMeta<'a> {

@@ -1,25 +1,28 @@
 use {
     crate::{
-        account_storage::meta::{StoredAccountMeta},
-        append_vec::{MatchAccountOwnerError, ALIGN_BOUNDARY_OFFSET},
+        account_storage::meta::{StoredAccountMeta, StoredMetaWriteVersion},
+        accounts_file::ALIGN_BOUNDARY_OFFSET,
+        append_vec::MatchAccountOwnerError,
         tiered_storage::{
-            data_block::{AccountDataBlock, AccountDataBlockFormat},
+            data_block::AccountDataBlock,
             file::TieredStorageFile,
-            footer::TieredStorageFooter,
-            reader::{TieredAccountMeta, TieredStorageReader},
-            meta_entries::{AccountMetaStorageEntry},
+            footer::{AccountDataBlockFormat, TieredStorageFooter},
+            meta_entries::{
+                get_compressed_block_size,
+                AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta,
+                ACCOUNT_DATA_ENTIRE_BLOCK, DEFAULT_ACCOUNT_HASH,
+            },
+            reader::{TieredStorageReader, TieredStoredAccountMeta},
         },
     },
-    solana_sdk::{
-        pubkey::Pubkey,
-    },
+    solana_sdk::{hash::Hash, pubkey::Pubkey, stake_history::Epoch},
     std::{collections::HashMap, path::Path},
 };
 
 #[derive(Debug)]
 pub struct ColdStorageReader {
     pub(crate) footer: TieredStorageFooter,
-    pub(crate) metas: Vec<AccountMetaStorageEntry>,
+    pub(crate) metas: Vec<ColdAccountMeta>,
     accounts: Vec<Pubkey>,
     owners: Vec<Pubkey>,
     data_blocks: HashMap<u64, Vec<u8>>,
@@ -82,7 +85,7 @@ impl ColdStorageReader {
         }
         if let Some(data_block) = self.data_blocks.get(&self.metas[index].block_offset()) {
             return Some((
-                StoredAccountMeta::Tiered(TieredAccountMeta {
+                StoredAccountMeta::Tiered(TieredStoredAccountMeta {
                     meta: &self.metas[index],
                     pubkey: &self.accounts[index],
                     owner: &self.owners[self.metas[index].owner_local_id() as usize],
@@ -99,7 +102,6 @@ impl ColdStorageReader {
 pub(crate) struct ColdReaderBuilder {}
 
 impl ColdReaderBuilder {
-
     fn read_footer_block(storage: &TieredStorageFile) -> std::io::Result<TieredStorageFooter> {
         TieredStorageFooter::new_from_footer_block(&storage)
     }
@@ -107,14 +109,14 @@ impl ColdReaderBuilder {
     fn read_account_metas_block(
         storage: &TieredStorageFile,
         footer: &TieredStorageFooter,
-    ) -> std::io::Result<Vec<AccountMetaStorageEntry>> {
-        let mut metas: Vec<AccountMetaStorageEntry> =
+    ) -> std::io::Result<Vec<ColdAccountMeta>> {
+        let mut metas: Vec<ColdAccountMeta> =
             Vec::with_capacity(footer.account_meta_count as usize);
 
         (&storage).seek(footer.account_metas_offset)?;
 
         for _ in 0..footer.account_meta_count {
-            metas.push(AccountMetaStorageEntry::new_from_file(&storage)?);
+            metas.push(ColdAccountMeta::new_from_file(&storage)?);
         }
 
         Ok(metas)
@@ -157,7 +159,7 @@ impl ColdReaderBuilder {
     pub fn read_data_blocks(
         storage: &TieredStorageFile,
         footer: &TieredStorageFooter,
-        metas: &Vec<AccountMetaStorageEntry>,
+        metas: &Vec<ColdAccountMeta>,
     ) -> std::io::Result<HashMap<u64, Vec<u8>>> {
         let count = footer.account_meta_count as usize;
         let mut data_blocks = HashMap::<u64, Vec<u8>>::new();
@@ -171,7 +173,7 @@ impl ColdReaderBuilder {
         data_blocks: &mut HashMap<u64, Vec<u8>>,
         storage: &TieredStorageFile,
         footer: &TieredStorageFooter,
-        metas: &Vec<AccountMetaStorageEntry>,
+        metas: &Vec<ColdAccountMeta>,
         index: usize,
     ) -> std::io::Result<()> {
         let block_offset = &metas[index].block_offset();
@@ -186,10 +188,11 @@ impl ColdReaderBuilder {
     pub fn read_data_block(
         storage: &TieredStorageFile,
         footer: &TieredStorageFooter,
-        metas: &Vec<AccountMetaStorageEntry>,
+        metas: &Vec<ColdAccountMeta>,
         index: usize,
     ) -> std::io::Result<Vec<u8>> {
-        let compressed_block_size = Self::get_compressed_block_size(footer, metas, index) as usize;
+        let compressed_block_size = get_compressed_block_size(
+            footer, metas, index) as usize;
 
         (&storage).seek(metas[index].block_offset())?;
 
@@ -203,22 +206,299 @@ impl ColdReaderBuilder {
         )?)
     }
 
-    pub(crate) fn get_compressed_block_size(
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct ColdAccountMeta {
+    lamports: u64,
+    block_offset: u64,
+    uncompressed_data_size: u16,
+    intra_block_offset: u16,
+    owner_local_id: u32,
+    flags: u32,
+}
+
+impl TieredAccountMeta for ColdAccountMeta {
+    fn new() -> Self {
+        Self {
+            ..ColdAccountMeta::default()
+        }
+    }
+
+    fn with_lamports(&mut self, lamports: u64) -> &mut Self {
+        self.lamports = lamports;
+        self
+    }
+
+    fn with_block_offset(&mut self, offset: u64) -> &mut Self {
+        self.block_offset = offset;
+        self
+    }
+
+    fn with_owner_local_id(&mut self, local_id: u32) -> &mut Self {
+        self.owner_local_id = local_id;
+        self
+    }
+
+    fn with_uncompressed_data_size(&mut self, data_size: u16) -> &mut Self {
+        self.uncompressed_data_size = data_size;
+        self
+    }
+
+    fn with_intra_block_offset(&mut self, offset: u16) -> &mut Self {
+        self.intra_block_offset = offset;
+        self
+    }
+
+    fn with_flags(&mut self, flags: u32) -> &mut Self {
+        self.flags = flags;
+        self
+    }
+
+    fn with_optional_fields(&mut self, fields: &AccountMetaOptionalFields) -> &mut Self {
+        fields.update_flags(&mut self.flags);
+
+        self
+    }
+
+    fn lamports(&self) -> u64 {
+        self.lamports
+    }
+
+    fn block_offset(&self) -> u64 {
+        self.block_offset
+    }
+
+    fn set_block_offset(&mut self, offset: u64) {
+        self.block_offset = offset;
+    }
+
+    fn padding_bytes(&self) -> u8 {
+        0u8
+    }
+
+    fn set_padding_bytes(&mut self, _paddings: u8) {}
+
+    fn uncompressed_data_size(&self) -> u16 {
+        self.uncompressed_data_size
+    }
+
+    fn intra_block_offset(&self) -> u16 {
+        self.intra_block_offset
+    }
+
+    fn owner_local_id(&self) -> u32 {
+        self.owner_local_id
+    }
+
+    fn flags_get(&self, bit_field: u32) -> bool {
+        AccountMetaFlags::get(&self.flags, bit_field)
+    }
+
+    fn rent_epoch(&self, data_block: &[u8]) -> Option<Epoch> {
+        let offset = self.optional_fields_offset(data_block);
+        if self.flags_get(AccountMetaFlags::HAS_RENT_EPOCH) {
+            unsafe {
+                let unaligned =
+                    std::ptr::addr_of!(data_block[offset..offset + std::mem::size_of::<Epoch>()])
+                        as *const Epoch;
+                return Some(std::ptr::read_unaligned(unaligned));
+            }
+        }
+        None
+    }
+
+    fn account_hash<'a>(&self, data_block: &'a [u8]) -> &'a Hash {
+        let mut offset = self.optional_fields_offset(data_block);
+        if self.flags_get(AccountMetaFlags::HAS_RENT_EPOCH) {
+            offset += std::mem::size_of::<Epoch>();
+        }
+        if self.flags_get(AccountMetaFlags::HAS_ACCOUNT_HASH) {
+            unsafe {
+                let raw_ptr = std::slice::from_raw_parts(
+                    data_block[offset..offset + std::mem::size_of::<Hash>()].as_ptr() as *const u8,
+                    std::mem::size_of::<Hash>(),
+                );
+                let ptr: *const Hash = raw_ptr.as_ptr() as *const Hash;
+                return &*ptr;
+            }
+        }
+        return &DEFAULT_ACCOUNT_HASH;
+    }
+
+    fn write_version(&self, data_block: &[u8]) -> Option<StoredMetaWriteVersion> {
+        let mut offset = self.optional_fields_offset(data_block);
+        if self.flags_get(AccountMetaFlags::HAS_RENT_EPOCH) {
+            offset += std::mem::size_of::<Epoch>();
+        }
+        if self.flags_get(AccountMetaFlags::HAS_ACCOUNT_HASH) {
+            offset += std::mem::size_of::<Hash>();
+        }
+        if self.flags_get(AccountMetaFlags::HAS_WRITE_VERSION) {
+            unsafe {
+                let unaligned = std::ptr::addr_of!(
+                    data_block[offset..offset + std::mem::size_of::<StoredMetaWriteVersion>()]
+                ) as *const StoredMetaWriteVersion;
+                return Some(std::ptr::read_unaligned(unaligned));
+            }
+        }
+        None
+    }
+
+    fn data_len(&self, data_block: &[u8]) -> usize {
+        self.optional_fields_offset(data_block).saturating_sub(
+            self.intra_block_offset as usize)
+    }
+
+    fn optional_fields_offset<'a>(&self, data_block: &'a [u8]) -> usize {
+        if self.is_blob_account() {
+            return data_block.len().saturating_sub(self.optional_fields_size());
+        }
+        (self.intra_block_offset + self.uncompressed_data_size) as usize
+    }
+
+    fn account_data<'a>(&self, data_block: &'a [u8]) -> &'a [u8] {
+        &data_block[(self.intra_block_offset as usize)..self.optional_fields_offset(data_block)]
+    }
+
+    fn is_blob_account(&self) -> bool {
+        self.uncompressed_data_size == ACCOUNT_DATA_ENTIRE_BLOCK && self.intra_block_offset == 0
+    }
+
+    fn write_account_meta_entry(&self, ads_file: &TieredStorageFile) -> std::io::Result<usize> {
+        ads_file.write_type(self)?;
+
+        Ok(std::mem::size_of::<ColdAccountMeta>())
+    }
+
+    fn stored_size(
         footer: &TieredStorageFooter,
-        metas: &Vec<AccountMetaStorageEntry>,
-        index: usize,
+        metas: &Vec<impl TieredAccountMeta>,
+        i: usize,
     ) -> usize {
-        let mut block_size = footer.account_metas_offset - metas[index].block_offset();
+        let compressed_block_size = get_compressed_block_size(footer, metas, i);
+
+        let data_size = if metas[i].is_blob_account() {
+            compressed_block_size
+        } else {
+            let compression_rate: f64 =
+                compressed_block_size as f64 / Self::get_raw_block_size(metas, i) as f64;
+
+            ((metas[i].uncompressed_data_size() as usize + metas[i].optional_fields_size()) as f64
+                / compression_rate) as usize
+        };
+
+        return std::mem::size_of::<ColdAccountMeta>() + data_size;
+    }
+}
+
+impl ColdAccountMeta {
+    fn new_from_file(ads_file: &TieredStorageFile) -> std::io::Result<Self> {
+        let mut entry = ColdAccountMeta::new();
+        ads_file.read_type(&mut entry)?;
+
+        Ok(entry)
+    }
+
+    pub fn get_raw_block_size(metas: &Vec<impl TieredAccountMeta>, index: usize) -> usize {
+        let mut block_size = 0;
 
         for i in index..metas.len() {
             if metas[i].block_offset() == metas[index].block_offset() {
-                continue;
+                block_size += metas[i].uncompressed_data_size();
+            } else {
+                break;
             }
-            block_size = metas[i].block_offset() - metas[index].block_offset();
-            break;
         }
 
         block_size.try_into().unwrap()
     }
 }
 
+impl Default for ColdAccountMeta {
+    fn default() -> Self {
+        Self {
+            lamports: 0,
+            block_offset: 0,
+            owner_local_id: 0,
+            uncompressed_data_size: 0,
+            intra_block_offset: 0,
+            flags: AccountMetaFlags::new().to_value(),
+        }
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use {
+        crate::{
+            account_storage::meta::StoredMetaWriteVersion,
+            append_vec::test_utils::get_append_vec_path,
+            tiered_storage::{
+                cold::ColdAccountMeta,
+                file::TieredStorageFile,
+                meta_entries::{AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta},
+            },
+        },
+        ::solana_sdk::{hash::Hash, stake_history::Epoch},
+        memoffset::offset_of,
+    };
+
+    #[test]
+    fn test_account_meta_entry() {
+        let path = get_append_vec_path("test_account_meta_entry");
+
+        const TEST_LAMPORT: u64 = 7;
+        const BLOCK_OFFSET: u64 = 56987;
+        const OWNER_LOCAL_ID: u32 = 54;
+        const UNCOMPRESSED_LENGTH: u16 = 0;
+        const LOCAL_OFFSET: u16 = 82;
+        const TEST_RENT_EPOCH: Epoch = 7;
+        const TEST_WRITE_VERSION: StoredMetaWriteVersion = 0;
+
+        let optional_fields = AccountMetaOptionalFields {
+            rent_epoch: Some(TEST_RENT_EPOCH),
+            account_hash: Some(Hash::new_unique()),
+            write_version_obsolete: Some(TEST_WRITE_VERSION),
+        };
+
+        let mut expected_entry = ColdAccountMeta::new();
+        expected_entry
+            .with_lamports(TEST_LAMPORT)
+            .with_block_offset(BLOCK_OFFSET)
+            .with_owner_local_id(OWNER_LOCAL_ID)
+            .with_uncompressed_data_size(UNCOMPRESSED_LENGTH)
+            .with_intra_block_offset(LOCAL_OFFSET)
+            .with_flags(
+                AccountMetaFlags::new()
+                    .with_bit(AccountMetaFlags::EXECUTABLE, true)
+                    .to_value(),
+            )
+            .with_optional_fields(&optional_fields);
+
+        {
+            let mut ads_file = TieredStorageFile::new(&path.path, true);
+            expected_entry
+                .write_account_meta_entry(&mut ads_file)
+                .unwrap();
+        }
+
+        let mut ads_file = TieredStorageFile::new(&path.path, true);
+        let entry = ColdAccountMeta::new_from_file(&mut ads_file).unwrap();
+
+        assert_eq!(expected_entry, entry);
+        assert_eq!(entry.flags_get(AccountMetaFlags::EXECUTABLE), true);
+        assert_eq!(entry.flags_get(AccountMetaFlags::HAS_RENT_EPOCH), true);
+    }
+
+    #[test]
+    fn test_cold_account_meta_layout() {
+        assert_eq!(offset_of!(ColdAccountMeta, lamports), 0x00);
+        assert_eq!(offset_of!(ColdAccountMeta, block_offset), 0x08);
+        assert_eq!(offset_of!(ColdAccountMeta, uncompressed_data_size), 0x10);
+        assert_eq!(offset_of!(ColdAccountMeta, intra_block_offset), 0x12);
+        assert_eq!(offset_of!(ColdAccountMeta, owner_local_id), 0x14);
+        assert_eq!(offset_of!(ColdAccountMeta, flags), 0x18);
+    }
+}

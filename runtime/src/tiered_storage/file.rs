@@ -1,10 +1,8 @@
-use {
-    std::{
-        fs::{File, OpenOptions},
-        io::{Read, Seek, SeekFrom, Write},
-        mem,
-        path::Path,
-    },
+use std::{
+    fs::{File, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    mem,
+    path::Path,
 };
 
 #[derive(Debug)]
@@ -29,7 +27,7 @@ impl TieredStorageFile {
                 );
             })
             .unwrap();
-        Self{file}
+        Self { file }
     }
 
     pub fn write_type<T>(&self, value: &T) -> Result<usize, std::io::Error> {

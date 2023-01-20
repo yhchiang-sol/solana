@@ -4,6 +4,7 @@ pub mod cold;
 pub mod data_block;
 pub mod file;
 pub mod footer;
+pub mod hot;
 pub mod meta_entries;
 pub mod reader;
 pub mod writer;
@@ -262,9 +263,12 @@ pub mod tests {
                 AppendVec,
             },
             tiered_storage::{
-                data_block::AccountDataBlockFormat,
-                footer::{TieredStorageFooter, FOOTER_SIZE},
-                meta_entries::{AccountMetaStorageEntry, ACCOUNT_META_ENTRY_SIZE_BYTES},
+                cold::ColdAccountMeta,
+                footer::{
+                    AccountDataBlockFormat, AccountIndexFormat, AccountMetaFormat,
+                    OwnersBlockFormat, TieredStorageFooter, FOOTER_SIZE,
+                },
+                meta_entries::ACCOUNT_META_ENTRY_SIZE_BYTES,
                 reader::TieredStorageReader,
                 TieredStorage, ACCOUNTS_DATA_STORAGE_FORMAT_VERSION, ACCOUNT_DATA_BLOCK_SIZE,
             },
@@ -288,7 +292,7 @@ pub mod tests {
             }
             None
         }
-        fn metas(&self) -> Option<&Vec<AccountMetaStorageEntry>> {
+        fn metas(&self) -> Option<&Vec<ColdAccountMeta>> {
             if let Some(reader) = self.reader.get() {
                 return Some(reader.metas());
             }
@@ -302,7 +306,7 @@ pub mod tests {
                 Self::Cold(cs) => &cs.footer,
             }
         }
-        fn metas(&self) -> &Vec<AccountMetaStorageEntry> {
+        fn metas(&self) -> &Vec<ColdAccountMeta> {
             match self {
                 Self::Cold(cs) => &cs.metas,
             }
@@ -320,7 +324,7 @@ pub mod tests {
         const DATA_LENGTH: u16 = 976;
         const TEST_RENT_EPOCH: Epoch = 327;
         const TEST_WRITE_VERSION: StoredMetaWriteVersion = 543432;
-        let mut expected_metas: Vec<AccountMetaStorageEntry> = vec![];
+        let mut expected_metas: Vec<ColdAccountMeta> = vec![];
 
         {
             let ads = TieredStorageWriter::new(&path.path);
@@ -329,7 +333,7 @@ pub mod tests {
             let meta_per_block = (ACCOUNT_DATA_BLOCK_SIZE as u16) / DATA_LENGTH;
             for i in 0..ENTRY_COUNT {
                 expected_metas.push(
-                    AccountMetaStorageEntry::new()
+                    ColdAccountMeta::new()
                         .with_lamports(i * TEST_LAMPORT_BASE)
                         .with_block_offset(i * BLOCK_OFFSET_BASE)
                         .with_owner_local_id(i as u32)
@@ -364,7 +368,7 @@ pub mod tests {
         }
 
         let ads = TieredStorage::new_for_test(&path.path, false);
-        let metas: Vec<AccountMetaStorageEntry> =
+        let metas: Vec<ColdAccountMeta> =
             ads.read_account_metas_block(0, ENTRY_COUNT as u32).unwrap();
         assert_eq!(expected_metas, metas);
         for i in 0..ENTRY_COUNT as usize {
@@ -539,6 +543,10 @@ pub mod tests {
         let footer = ads.footer().unwrap();
 
         let expected_footer = TieredStorageFooter {
+            account_meta_format: AccountMetaFormat::Cold,
+            owners_block_format: OwnersBlockFormat::LocalIndex,
+            account_index_format: AccountIndexFormat::Linear,
+            data_block_format: AccountDataBlockFormat::Lz4,
             account_meta_count: account_count as u32,
             account_meta_entry_size: ACCOUNT_META_ENTRY_SIZE_BYTES,
             account_data_block_size: ACCOUNT_DATA_BLOCK_SIZE as u64,
@@ -550,7 +558,6 @@ pub mod tests {
             owners_offset: footer.account_pubkeys_offset
                 + (account_count * mem::size_of::<Pubkey>()) as u64,
             // TODO(yhchiang): not yet implemented
-            data_block_format: AccountDataBlockFormat::Lz4,
             // TODO(yhchiang): not yet implemented
             hash: footer.hash,
             // TODO(yhchiang): fix this
