@@ -576,7 +576,7 @@ struct AccountsToCombine<'a> {
 /// intended contents of a packed ancient storage
 struct PackedAncientStorage<'a> {
     /// accounts to move into this storage, along with the slot the accounts are currently stored in
-    accounts: Vec<(Slot, &'a [&'a StoredAccountMeta<'a>])>,
+    accounts: Vec<(Slot, &'a [&'a dyn StoredAccountMeta<'a>])>,
     /// total bytes required to hold 'accounts'
     bytes: u64,
 }
@@ -684,7 +684,7 @@ pub enum StorageSelector {
 /// We need 1-2 of these slices constructed based on available bytes and individual account sizes.
 /// The slice arithmetic across both hashes and account data gets messy. So, this struct abstracts that.
 pub struct AccountsToStore<'a> {
-    accounts: &'a [&'a StoredAccountMeta<'a>],
+    accounts: &'a [&'a dyn StoredAccountMeta<'a>],
     /// if 'accounts' contains more items than can be contained in the primary storage, then we have to split these accounts.
     /// 'index_first_item_overflow' specifies the index of the first item in 'accounts' that will go into the overflow storage
     index_first_item_overflow: usize,
@@ -696,7 +696,7 @@ impl<'a> AccountsToStore<'a> {
     /// available_bytes: how many bytes remain in the primary storage. Excess accounts will be directed to an overflow storage
     pub fn new(
         mut available_bytes: u64,
-        accounts: &'a [&'a StoredAccountMeta<'a>],
+        accounts: &'a [&'a dyn StoredAccountMeta<'a>],
         alive_total_bytes: usize,
         slot: Slot,
     ) -> Self {
@@ -729,7 +729,7 @@ impl<'a> AccountsToStore<'a> {
     }
 
     /// get the accounts to store in the given 'storage'
-    pub fn get(&self, storage: StorageSelector) -> &[&'a StoredAccountMeta<'a>] {
+    pub fn get(&self, storage: StorageSelector) -> &[&'a dyn StoredAccountMeta<'a>] {
         let range = match storage {
             StorageSelector::Primary => 0..self.index_first_item_overflow,
             StorageSelector::Overflow => self.index_first_item_overflow..self.accounts.len(),
@@ -1618,7 +1618,7 @@ pub mod tests {
             pubkey,
             data_len: 43,
         };
-        let account = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        let account = AppendVecAccountMeta {
             meta: &stored_meta,
             /// account data
             account_meta: &account_meta,
@@ -1626,7 +1626,7 @@ pub mod tests {
             offset,
             stored_size: account_size,
             hash: &hash,
-        });
+        };
         let map = vec![&account];
         for (selector, available_bytes) in [
             (StorageSelector::Primary, account_size),

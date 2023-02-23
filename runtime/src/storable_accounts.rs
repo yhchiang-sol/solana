@@ -1,6 +1,8 @@
 //! trait for abstracting underlying storage of pubkey and account pairs to be written
 use {
-    crate::{account_storage::meta::StoredAccountMeta, accounts_db::IncludeSlotInHash},
+    crate::{
+        append_vec::AppendVecAccountMeta,
+        account_storage::meta::StoredAccountMeta, accounts_db::IncludeSlotInHash},
     solana_sdk::{account::ReadableAccount, clock::Slot, hash::Hash, pubkey::Pubkey},
 };
 
@@ -122,13 +124,13 @@ impl<'a, T: ReadableAccount + Sync> StorableAccounts<'a, T>
 
 /// The last parameter exists until this feature is activated:
 ///  ignore slot when calculating an account hash #28420
-impl<'a> StorableAccounts<'a, StoredAccountMeta<'a>>
-    for (Slot, &'a [&'a StoredAccountMeta<'a>], IncludeSlotInHash)
+impl<'a> StorableAccounts<'a, AppendVecAccountMeta<'a>>
+    for (Slot, &'a [&'a AppendVecAccountMeta<'a>], IncludeSlotInHash)
 {
     fn pubkey(&self, index: usize) -> &Pubkey {
         self.account(index).pubkey()
     }
-    fn account(&self, index: usize) -> &StoredAccountMeta<'a> {
+    fn account(&self, index: usize) -> &AppendVecAccountMeta<'a> {
         self.1[index]
     }
     fn slot(&self, _index: usize) -> Slot {
@@ -159,7 +161,7 @@ impl<'a> StorableAccounts<'a, StoredAccountMeta<'a>>
 pub struct StorableAccountsBySlot<'a> {
     target_slot: Slot,
     /// each element is (source slot, accounts moving FROM source slot)
-    slots_and_accounts: &'a [(Slot, &'a [&'a StoredAccountMeta<'a>])],
+    slots_and_accounts: &'a [(Slot, &'a [&'a AppendVecAccountMeta<'a>])],
     include_slot_in_hash: IncludeSlotInHash,
 
     /// This is calculated based off slots_and_accounts.
@@ -178,7 +180,7 @@ impl<'a> StorableAccountsBySlot<'a> {
     /// each element of slots_and_accounts is (source slot, accounts moving FROM source slot)
     pub(crate) fn new(
         target_slot: Slot,
-        slots_and_accounts: &'a [(Slot, &'a [&'a StoredAccountMeta<'a>])],
+        slots_and_accounts: &'a [(Slot, &'a [&'a AppendVecAccountMeta<'a>])],
         include_slot_in_hash: IncludeSlotInHash,
     ) -> Self {
         let mut cumulative_len = 0usize;
@@ -224,11 +226,11 @@ impl<'a> StorableAccountsBySlot<'a> {
 
 /// The last parameter exists until this feature is activated:
 ///  ignore slot when calculating an account hash #28420
-impl<'a> StorableAccounts<'a, StoredAccountMeta<'a>> for StorableAccountsBySlot<'a> {
+impl<'a> StorableAccounts<'a, AppendVecAccountMeta<'a>> for StorableAccountsBySlot<'a> {
     fn pubkey(&self, index: usize) -> &Pubkey {
         self.account(index).pubkey()
     }
-    fn account(&self, index: usize) -> &StoredAccountMeta<'a> {
+    fn account(&self, index: usize) -> &AppendVecAccountMeta<'a> {
         let indexes = self.find_internal_index(index);
         self.slots_and_accounts[indexes.0].1[indexes.1]
     }
@@ -260,11 +262,11 @@ impl<'a> StorableAccounts<'a, StoredAccountMeta<'a>> for StorableAccountsBySlot<
 }
 
 /// this tuple contains a single different source slot that applies to all accounts
-/// accounts are StoredAccountMeta
-impl<'a> StorableAccounts<'a, StoredAccountMeta<'a>>
+/// accounts are AppendVecAccountMeta
+impl<'a> StorableAccounts<'a, AppendVecAccountMeta<'a>>
     for (
         Slot,
-        &'a [&'a StoredAccountMeta<'a>],
+        &'a [&'a AppendVecAccountMeta<'a>],
         IncludeSlotInHash,
         Slot,
     )
@@ -272,7 +274,7 @@ impl<'a> StorableAccounts<'a, StoredAccountMeta<'a>>
     fn pubkey(&self, index: usize) -> &Pubkey {
         self.account(index).pubkey()
     }
-    fn account(&self, index: usize) -> &StoredAccountMeta<'a> {
+    fn account(&self, index: usize) -> &AppendVecAccountMeta<'a> {
         self.1[index]
     }
     fn slot(&self, _index: usize) -> Slot {
@@ -354,14 +356,14 @@ pub mod tests {
         let offset = 99;
         let stored_size = 101;
         let hash = Hash::new_unique();
-        let stored_account = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        let stored_account = AppendVecAccountMeta {
             meta: &meta,
             account_meta: &account_meta,
             data: &data,
             offset,
             stored_size,
             hash: &hash,
-        });
+        };
 
         let test3 = (
             slot,
@@ -412,14 +414,14 @@ pub mod tests {
                     for entry in 0..entries {
                         let offset = 99;
                         let stored_size = 101;
-                        raw2.push(StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+                        raw2.push(AppendVecAccountMeta {
                             meta: &raw[entry as usize].3,
                             account_meta: &raw[entry as usize].4,
                             data: &data,
                             offset,
                             stored_size,
                             hash: &hash,
-                        }));
+                        });
                     }
 
                     let mut two = Vec::new();
@@ -509,14 +511,14 @@ pub mod tests {
             for entry in 0..entries {
                 let offset = 99;
                 let stored_size = 101;
-                raw2.push(StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+                raw2.push(AppendVecAccountMeta {
                     meta: &raw[entry as usize].2,
                     account_meta: &raw[entry as usize].3,
                     data: &data,
                     offset,
                     stored_size,
                     hash: &hashes[entry as usize],
-                }));
+                });
             }
             let raw2_refs = raw2.iter().collect::<Vec<_>>();
 

@@ -75,7 +75,7 @@ impl<'a> AppendVecAccountsIter<'a> {
 }
 
 impl<'a> Iterator for AppendVecAccountsIter<'a> {
-    type Item = StoredAccountMeta<'a>;
+    type Item = AppendVecAccountMeta<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((account, next_offset)) = self.append_vec.get_account(self.offset) {
@@ -108,8 +108,8 @@ pub struct AppendVecAccountMeta<'a> {
     pub(crate) hash: &'a Hash,
 }
 
-impl<'a> AppendVecAccountMeta<'a> {
-    pub fn clone_account(&self) -> AccountSharedData {
+impl<'a> StoredAccountMeta<'a> for AppendVecAccountMeta<'a> {
+    fn clone_account(&self) -> AccountSharedData {
         AccountSharedData::from(Account {
             lamports: self.account_meta.lamports,
             owner: self.account_meta.owner,
@@ -119,57 +119,57 @@ impl<'a> AppendVecAccountMeta<'a> {
         })
     }
 
-    pub fn pubkey(&self) -> &Pubkey {
+    fn pubkey(&self) -> &Pubkey {
         &self.meta.pubkey
     }
 
-    pub fn hash(&self) -> &Hash {
+    fn hash(&self) -> &Hash {
         self.hash
     }
 
-    pub fn stored_size(&self) -> usize {
+    fn stored_size(&self) -> usize {
         self.stored_size
     }
 
-    pub fn offset(&self) -> usize {
+    fn offset(&self) -> usize {
         self.offset
     }
 
-    pub fn data(&self) -> &[u8] {
+    fn data(&self) -> &[u8] {
         &self.data
     }
 
-    pub fn data_len(&self) -> u64 {
+    fn data_len(&self) -> u64 {
         self.meta.data_len
     }
 
-    pub fn write_version(&self) -> StoredMetaWriteVersion {
+    fn write_version(&self) -> StoredMetaWriteVersion {
         self.meta.write_version_obsolete
     }
 
-    pub fn meta(&self) -> &StoredMeta {
+    fn meta(&self) -> &StoredMeta {
         self.meta
     }
 
-    pub fn set_meta(&mut self, meta: &'a StoredMeta) {
+    fn set_meta(&mut self, meta: &'a StoredMeta) {
         self.meta = meta;
     }
 
-    pub(crate) fn sanitize(&self) -> bool {
+    fn sanitize(&self) -> bool {
         self.sanitize_executable() && self.sanitize_lamports()
     }
 
-    pub(crate) fn sanitize_executable(&self) -> bool {
+    fn sanitize_executable(&self) -> bool {
         // Sanitize executable to ensure higher 7-bits are cleared correctly.
         self.ref_executable_byte() & !1 == 0
     }
 
-    pub(crate) fn sanitize_lamports(&self) -> bool {
+    fn sanitize_lamports(&self) -> bool {
         // Sanitize 0 lamports to ensure to be same as AccountSharedData::default()
         self.account_meta.lamports != 0 || self.clone_account() == AccountSharedData::default()
     }
 
-    pub(crate) fn ref_executable_byte(&self) -> &u8 {
+    fn ref_executable_byte(&self) -> &u8 {
         // Use extra references to avoid value silently clamped to 1 (=true) and 0 (=false)
         // Yes, this really happens; see test_new_from_file_crafted_executable
         let executable_bool: &bool = &self.account_meta.executable;
@@ -502,21 +502,21 @@ impl AppendVec {
     /// Return stored account metadata for the account at `offset` if its data doesn't overrun
     /// the internal buffer. Otherwise return None. Also return the offset of the first byte
     /// after the requested data that falls on a 64-byte boundary.
-    pub fn get_account<'a>(&'a self, offset: usize) -> Option<(StoredAccountMeta<'a>, usize)> {
+    pub fn get_account<'a>(&'a self, offset: usize) -> Option<(AppendVecAccountMeta<'a>, usize)> {
         let (meta, next): (&'a StoredMeta, _) = self.get_type(offset)?;
         let (account_meta, next): (&'a AccountMeta, _) = self.get_type(next)?;
         let (hash, next): (&'a Hash, _) = self.get_type(next)?;
         let (data, next) = self.get_slice(next, meta.data_len as usize)?;
         let stored_size = next - offset;
         Some((
-            StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+            AppendVecAccountMeta {
                 meta,
                 account_meta,
                 data,
                 offset,
                 stored_size,
                 hash,
-            }),
+            },
             next,
         ))
     }
@@ -572,7 +572,7 @@ impl AppendVec {
     }
 
     /// Return a vector of account metadata for each account, starting from `offset`.
-    pub fn accounts(&self, mut offset: usize) -> Vec<StoredAccountMeta> {
+    pub fn accounts(&self, mut offset: usize) -> Vec<AppendVecAccountMeta> {
         let mut accounts = vec![];
         while let Some((account, next)) = self.get_account(offset) {
             accounts.push(account);

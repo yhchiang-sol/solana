@@ -118,7 +118,7 @@ impl AccountsDb {
         &self,
         slot: Slot,
         notified_accounts: &mut HashSet<Pubkey>,
-        mut accounts_to_stream: HashMap<Pubkey, StoredAccountMeta>,
+        mut accounts_to_stream: HashMap<Pubkey, dyn StoredAccountMeta>,
         notify_stats: &mut GeyserPluginNotifyAtSnapshotRestoreStats,
     ) {
         let notifier = self

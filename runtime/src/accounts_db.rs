@@ -183,7 +183,7 @@ impl<'a> StoreTo<'a> {
 pub(crate) struct AliveAccounts<'a> {
     /// slot the accounts are currently stored in
     pub(crate) slot: Slot,
-    pub(crate) accounts: Vec<&'a StoredAccountMeta<'a>>,
+    pub(crate) accounts: Vec<Box<&'a dyn StoredAccountMeta<'a>>>,
     pub(crate) bytes: usize,
 }
 
@@ -216,10 +216,10 @@ pub struct BankHashLamportsVerifyConfig<'a> {
 pub(crate) trait ShrinkCollectRefs<'a>: Sync + Send {
     fn with_capacity(capacity: usize, slot: Slot) -> Self;
     fn collect(&mut self, other: Self);
-    fn add(&mut self, ref_count: u64, account: &'a StoredAccountMeta<'a>);
+    fn add(&mut self, ref_count: u64, account: Box<&'a dyn StoredAccountMeta<'a>>);
     fn len(&self) -> usize;
     fn alive_bytes(&self) -> usize;
-    fn alive_accounts(&self) -> &Vec<&'a StoredAccountMeta<'a>>;
+    fn alive_accounts(&self) -> &Vec<Box<&'a dyn StoredAccountMeta<'a>>>;
 }
 
 impl<'a> ShrinkCollectRefs<'a> for AliveAccounts<'a> {
@@ -234,7 +234,7 @@ impl<'a> ShrinkCollectRefs<'a> for AliveAccounts<'a> {
             slot,
         }
     }
-    fn add(&mut self, _ref_count: u64, account: &'a StoredAccountMeta<'a>) {
+    fn add(&mut self, _ref_count: u64, account: Box<&'a dyn StoredAccountMeta<'a>>) {
         self.accounts.push(account);
         self.bytes = self.bytes.saturating_add(account.stored_size());
     }
@@ -244,7 +244,7 @@ impl<'a> ShrinkCollectRefs<'a> for AliveAccounts<'a> {
     fn alive_bytes(&self) -> usize {
         self.bytes
     }
-    fn alive_accounts(&self) -> &Vec<&'a StoredAccountMeta<'a>> {
+    fn alive_accounts(&self) -> &Vec<Box<&'a dyn StoredAccountMeta<'a>>> {
         &self.accounts
     }
 }
@@ -260,7 +260,7 @@ impl<'a> ShrinkCollectRefs<'a> for ShrinkCollectAliveSeparatedByRefs<'a> {
             many_refs: AliveAccounts::with_capacity(capacity, slot),
         }
     }
-    fn add(&mut self, ref_count: u64, account: &'a StoredAccountMeta<'a>) {
+    fn add(&mut self, ref_count: u64, account: Box<&'a dyn StoredAccountMeta<'a>>) {
         let other = if ref_count == 1 {
             &mut self.one_ref
         } else {
@@ -276,7 +276,7 @@ impl<'a> ShrinkCollectRefs<'a> for ShrinkCollectAliveSeparatedByRefs<'a> {
             .alive_bytes()
             .saturating_add(self.many_refs.alive_bytes())
     }
-    fn alive_accounts(&self) -> &Vec<&'a StoredAccountMeta<'a>> {
+    fn alive_accounts(&self) -> &Vec<Box<&'a dyn StoredAccountMeta<'a>>> {
         unimplemented!("illegal use");
     }
 }
@@ -458,7 +458,7 @@ pub(crate) struct ShrinkCollect<'a, T: ShrinkCollectRefs<'a>> {
     pub(crate) capacity: u64,
     pub(crate) aligned_total_bytes: u64,
     pub(crate) unrefed_pubkeys: Vec<&'a Pubkey>,
-    pub(crate) alive_accounts: T,
+    pub(crate) alive_accounts: Box<T>,
     /// total size in storage of all alive accounts
     pub(crate) alive_total_bytes: usize,
     pub(crate) total_starting_accounts: usize,
@@ -493,7 +493,7 @@ pub type BinnedHashData = Vec<Vec<CalculateHashIntermediate>>;
 
 struct LoadAccountsIndexForShrink<'a, T: ShrinkCollectRefs<'a>> {
     /// all alive accounts
-    alive_accounts: T,
+    alive_accounts: Box<T>,
     /// pubkeys that were unref'd in the accounts index because they were dead
     unrefed_pubkeys: Vec<&'a Pubkey>,
     /// true if all alive accounts are zero lamport accounts
@@ -501,7 +501,7 @@ struct LoadAccountsIndexForShrink<'a, T: ShrinkCollectRefs<'a>> {
 }
 
 pub struct GetUniqueAccountsResult<'a> {
-    pub stored_accounts: Vec<StoredAccountMeta<'a>>,
+    pub stored_accounts: Vec<dyn StoredAccountMeta<'a>>,
     pub capacity: u64,
 }
 
@@ -873,7 +873,7 @@ impl<'a> LoadedAccountAccessor<'a> {
 }
 
 pub enum LoadedAccount<'a> {
-    Stored(StoredAccountMeta<'a>),
+    Stored(Box<dyn StoredAccountMeta<'a>>),
     Cached(Cow<'a, CachedAccount>),
 }
 
@@ -1128,7 +1128,7 @@ impl AccountStorageEntry {
         self.accounts.flush()
     }
 
-    fn get_stored_account_meta(&self, offset: usize) -> Option<StoredAccountMeta> {
+    fn get_stored_account_meta(&self, offset: usize) -> Option<dyn StoredAccountMeta> {
         Some(self.accounts.get_account(offset)?.0)
     }
 
@@ -1151,7 +1151,7 @@ impl AccountStorageEntry {
         }
     }
 
-    pub fn all_accounts(&self) -> Vec<StoredAccountMeta> {
+    pub fn all_accounts(&self) -> Vec<dyn StoredAccountMeta> {
         self.accounts.accounts(0)
     }
 
@@ -2239,7 +2239,7 @@ impl solana_frozen_abi::abi_example::AbiExample for AccountsDb {
     }
 }
 
-impl<'a> ZeroLamport for StoredAccountMeta<'a> {
+impl<'a> ZeroLamport for dyn StoredAccountMeta<'a> {
     fn is_zero_lamport(&self) -> bool {
         self.lamports() == 0
     }
@@ -2248,7 +2248,7 @@ impl<'a> ZeroLamport for StoredAccountMeta<'a> {
 struct IndexAccountMapEntry<'a> {
     pub write_version: StoredMetaWriteVersion,
     pub store_id: AppendVecId,
-    pub stored_account: StoredAccountMeta<'a>,
+    pub stored_account: dyn StoredAccountMeta<'a>,
 }
 
 type GenerateIndexAccountsMap<'a> = HashMap<Pubkey, IndexAccountMapEntry<'a>>;
@@ -3731,7 +3731,7 @@ impl AccountsDb {
     /// return sum of account size for all alive accounts
     fn load_accounts_index_for_shrink<'a, T: ShrinkCollectRefs<'a>>(
         &self,
-        accounts: &'a [StoredAccountMeta<'a>],
+        accounts: &'a [dyn StoredAccountMeta<'a>],
         stats: &ShrinkStats,
         slot_to_shrink: Slot,
     ) -> LoadAccountsIndexForShrink<'a, T> {
@@ -4321,7 +4321,7 @@ impl AccountsDb {
     /// returns the pubkeys that are in 'accounts' that are already in 'existing_ancient_pubkeys'
     /// Also updated 'existing_ancient_pubkeys' to include all pubkeys in 'accounts' since they will soon be written into the ancient slot.
     fn get_keys_to_unref_ancient<'a>(
-        accounts: &'a [&StoredAccountMeta<'_>],
+        accounts: &'a [&dyn StoredAccountMeta<'_>],
         existing_ancient_pubkeys: &mut HashSet<Pubkey>,
     ) -> HashSet<&'a Pubkey> {
         let mut unref = HashSet::<&Pubkey>::default();
@@ -4343,7 +4343,7 @@ impl AccountsDb {
     /// As a side effect, on exit, 'existing_ancient_pubkeys' will now contain all pubkeys in 'accounts'.
     fn unref_accounts_already_in_storage(
         &self,
-        accounts: &[&StoredAccountMeta<'_>],
+        accounts: &[&dyn StoredAccountMeta<'_>],
         existing_ancient_pubkeys: &mut HashSet<Pubkey>,
     ) {
         let unref = Self::get_keys_to_unref_ancient(accounts, existing_ancient_pubkeys);
@@ -9601,7 +9601,7 @@ pub mod tests {
             pubkey,
             data_len: 43,
         };
-        let account = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        let account = AppendVecAccountMeta {
             meta: &stored_meta,
             /// account data
             account_meta: &account_meta,
@@ -9609,7 +9609,7 @@ pub mod tests {
             offset,
             stored_size: account_size,
             hash: &hash,
-        });
+        };
         let map = vec![&account];
         let alive_total_bytes = account.stored_size();
         let to_store = AccountsToStore::new(available_bytes, &map, alive_total_bytes, slot0);
@@ -9697,38 +9697,38 @@ pub mod tests {
         let offset = 99;
         let stored_size = 101;
         let hash = Hash::new_unique();
-        let stored_account = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        let stored_account = AppendVecAccountMeta {
             meta: &meta,
             account_meta: &account_meta,
             data: &data,
             offset,
             stored_size,
             hash: &hash,
-        });
-        let stored_account2 = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        };
+        let stored_account2 = AppendVecAccountMeta {
             meta: &meta2,
             account_meta: &account_meta,
             data: &data,
             offset,
             stored_size,
             hash: &hash,
-        });
-        let stored_account3 = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        };
+        let stored_account3 = AppendVecAccountMeta {
             meta: &meta3,
             account_meta: &account_meta,
             data: &data,
             offset,
             stored_size,
             hash: &hash,
-        });
-        let stored_account4 = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        };
+        let stored_account4 = AppendVecAccountMeta {
             meta: &meta4,
             account_meta: &account_meta,
             data: &data,
             offset,
             stored_size,
             hash: &hash,
-        });
+        };
         let mut existing_ancient_pubkeys = HashSet::default();
         let accounts = [&stored_account];
         // pubkey NOT in existing_ancient_pubkeys, so do NOT unref, but add to existing_ancient_pubkeys
@@ -12293,14 +12293,14 @@ pub mod tests {
         let offset = 99;
         let stored_size = 101;
         let hash = Hash::new_unique();
-        let stored_account = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        let stored_account = AppendVecAccountMeta {
             meta: &meta,
             account_meta: &account_meta,
             data: &data,
             offset,
             stored_size,
             hash: &hash,
-        });
+        };
         assert!(accounts_equal(&account, &stored_account));
     }
 
@@ -12337,14 +12337,14 @@ pub mod tests {
         let (slot, meta, account_meta, data, offset, hash): InputTuple =
             unsafe { std::mem::transmute::<InputBlob, InputTuple>(blob) };
 
-        let stored_account = StoredAccountMeta::AppendVec(AppendVecAccountMeta {
+        let stored_account = AppendVecAccountMeta {
             meta: &meta,
             account_meta: &account_meta,
             data: &data,
             offset,
             stored_size: CACHE_VIRTUAL_STORED_SIZE as usize,
             hash: &hash,
-        });
+        };
         let account = stored_account.clone_account();
 
         let expected_account_hash = if cfg!(debug_assertions) {
