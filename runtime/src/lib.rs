@@ -76,6 +76,7 @@ pub mod static_ids;
 pub mod status_cache;
 mod storable_accounts;
 mod system_instruction_processor;
+pub mod tiered_storage;
 pub mod transaction_batch;
 pub mod transaction_error_metrics;
 pub mod transaction_priority_details;
