@@ -22,6 +22,30 @@ pub struct AccountMetaFlags {
     reserved: B29,
 }
 
+/// A trait that allows different implementations of the account meta that
+/// support different tiers of the accounts storage.
+pub trait TieredAccountMeta {
+    /// Construct a TieredAcountMeta instance.
+    fn new() -> Self;
+
+    /// A builder function that initializes lamports.
+    fn with_lamports(&mut self, lamports: u64) -> &mut Self;
+
+    /// A builder function that initializes the number of padding bytes
+    /// for the account data associated with the current meta.
+    fn with_account_data_padding(&mut self, paddings: u8) -> &mut Self;
+
+    /// A builder function that initializes the owner's local id.
+    fn with_owner_local_id(&mut self, local_id: u32) -> &mut Self;
+
+    /// A builder function that initializes the uncompressed data size.
+    fn with_uncompressed_data_size(&mut self, data_size: u64) -> &mut Self;
+
+    /// A builder function that initializes the AccountMetaFlags of the current
+    /// meta.
+    fn with_flags(&mut self, flags: &AccountMetaFlags) -> &mut Self;
+}
+
 impl AccountMetaFlags {
     pub fn new_from(optional_fields: &AccountMetaOptionalFields) -> Self {
         let mut flags = AccountMetaFlags::default();
