@@ -1,13 +1,19 @@
 #![allow(dead_code)]
 //! The account meta and related structs for the tiered storage.
-
 use {
-    crate::account_storage::meta::StoredMetaWriteVersion,
+    crate::{
+        account_storage::meta::StoredMetaWriteVersion,
+        tiered_storage::{
+            file::TieredStorageFile, footer::TieredStorageFooter, TieredStorageResult,
+        },
+    },
+    ::solana_sdk::{hash::Hash, stake_history::Epoch},
     modular_bitfield::prelude::*,
-    solana_sdk::{hash::Hash, stake_history::Epoch},
+    std::mem::size_of,
 };
 
 /// The struct that handles the account meta flags.
+#[allow(dead_code)]
 #[bitfield(bits = 32)]
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
@@ -18,8 +24,102 @@ pub struct AccountMetaFlags {
     pub has_account_hash: bool,
     /// whether the account meta has write version
     pub has_write_version: bool,
+    /// is the account data is executable
+    pub executable: bool,
     /// the reserved bits.
-    reserved: B29,
+    reserved: B28,
+}
+
+lazy_static! {
+    pub static ref DEFAULT_ACCOUNT_HASH: Hash = Hash::default();
+}
+
+pub const ACCOUNT_DATA_ENTIRE_BLOCK: u16 = std::u16::MAX;
+
+// TODO(yhchiang): this function needs to be fixed.
+pub(crate) fn get_compressed_block_size(
+    _footer: &TieredStorageFooter,
+    _metas: &Vec<impl TieredAccountMeta>,
+    _index: usize,
+) -> usize {
+    unimplemented!();
+}
+
+pub trait TieredAccountMeta {
+    fn new() -> Self;
+
+    fn is_blob_account_data(data_len: u64) -> bool;
+
+    fn with_lamports(&mut self, _lamports: u64) -> &mut Self {
+        unimplemented!();
+    }
+
+    fn with_block_offset(&mut self, _offset: u64) -> &mut Self {
+        unimplemented!();
+    }
+
+    fn with_data_tailing_paddings(&mut self, _paddings: u8) -> &mut Self {
+        unimplemented!();
+    }
+
+    fn with_owner_local_id(&mut self, _local_id: u32) -> &mut Self {
+        unimplemented!();
+    }
+
+    fn with_uncompressed_data_size(&mut self, _data_size: u64) -> &mut Self {
+        unimplemented!();
+    }
+
+    fn with_intra_block_offset(&mut self, _offset: u16) -> &mut Self {
+        unimplemented!();
+    }
+
+    fn with_flags(&mut self, _flags: &AccountMetaFlags) -> &mut Self {
+        unimplemented!();
+    }
+
+    fn with_optional_fields(&mut self, _fields: &AccountMetaOptionalFields) -> &mut Self {
+        unimplemented!();
+    }
+
+    fn lamports(&self) -> u64;
+    fn block_offset(&self) -> u64;
+    fn set_block_offset(&mut self, offset: u64);
+    fn padding_bytes(&self) -> u8;
+    fn uncompressed_data_size(&self) -> usize {
+        unimplemented!();
+    }
+    fn intra_block_offset(&self) -> u16;
+    fn owner_local_id(&self) -> u32;
+    fn flags(&self) -> &AccountMetaFlags;
+    fn rent_epoch(&self, data_block: &[u8]) -> Option<Epoch>;
+    fn account_hash<'a>(&self, data_block: &'a [u8]) -> &'a Hash;
+    fn write_version(&self, data_block: &[u8]) -> Option<StoredMetaWriteVersion>;
+    fn optional_fields_size(&self) -> usize {
+        let mut size_in_bytes = 0;
+        if self.flags().has_rent_epoch() {
+            size_in_bytes += size_of::<Epoch>();
+        }
+        if self.flags().has_account_hash() {
+            size_in_bytes += size_of::<Hash>();
+        }
+        if self.flags().has_write_version() {
+            size_in_bytes += size_of::<StoredMetaWriteVersion>();
+        }
+
+        size_in_bytes
+    }
+
+    fn optional_fields_offset<'a>(&self, data_block: &'a [u8]) -> usize;
+    fn data_len(&self, data_block: &[u8]) -> usize;
+    fn account_data<'a>(&self, data_block: &'a [u8]) -> &'a [u8];
+    fn is_blob_account(&self) -> bool;
+    fn write_account_meta_entry(&self, ads_file: &TieredStorageFile) -> TieredStorageResult<usize>;
+    fn stored_size(
+        footer: &TieredStorageFooter,
+        metas: &Vec<impl TieredAccountMeta>,
+        i: usize,
+    ) -> usize;
 }
 
 impl AccountMetaFlags {
