@@ -47,7 +47,7 @@ impl Default for TieredStorageMagicNumber {
 pub enum AccountMetaFormat {
     #[default]
     Hot = 0,
-    Cold = 1,
+    // Cold = 1,
 }
 
 #[repr(u16)]
@@ -105,6 +105,15 @@ pub enum AccountIndexFormat {
     // Similar to index, but this format also stores the offset of each account
     // meta in the index block.
     LinearIndex = 1,
+}
+
+#[derive(Debug)]
+pub struct TieredFileFormat {
+    pub meta_entry_size: usize,
+    pub account_meta_format: AccountMetaFormat,
+    pub owners_block_format: OwnersBlockFormat,
+    pub account_index_format: AccountIndexFormat,
+    pub account_block_format: AccountBlockFormat,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

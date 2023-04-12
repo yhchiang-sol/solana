@@ -1,13 +1,16 @@
 use {
     crate::{
-        account_storage::meta::StoredMetaWriteVersion, tiered_storage::meta::TieredAccountMeta,
+        account_storage::meta::{StoredAccountMeta, StoredMetaWriteVersion},
+        append_vec::MatchAccountOwnerError,
+        tiered_storage::{
+            footer::{AccountMetaFormat, TieredStorageFooter},
+            hot::HotStorageReader,
+            meta::TieredAccountMeta,
+            TieredStorageResult,
+        },
     },
-    solana_sdk::{
-        account::{Account, AccountSharedData, ReadableAccount},
-        hash::Hash,
-        pubkey::Pubkey,
-        stake_history::Epoch,
-    },
+    solana_sdk::{account::ReadableAccount, hash::Hash, pubkey::Pubkey, stake_history::Epoch},
+    std::path::Path,
 };
 
 /// The struct that offers read APIs for accessing a TieredAccount.
@@ -46,6 +49,15 @@ impl<'a, M: TieredAccountMeta> TieredReadableAccount<'a, M> {
     pub fn write_version(&self) -> Option<StoredMetaWriteVersion> {
         self.meta.write_version(self.account_block)
     }
+
+    pub fn stored_size(&self) -> usize {
+        unimplemented!();
+    }
+
+    /// Returns the data associated to this account.
+    pub fn data(&self) -> &'a [u8] {
+        self.meta.account_data(self.account_block)
+    }
 }
 
 impl<'a, M: TieredAccountMeta> ReadableAccount for TieredReadableAccount<'a, M> {
@@ -64,7 +76,7 @@ impl<'a, M: TieredAccountMeta> ReadableAccount for TieredReadableAccount<'a, M> 
     /// Temporarily unimplemented!() as program runtime v2 will use
     /// a different API for executable.
     fn executable(&self) -> bool {
-        unimplemented!();
+        self.meta.flags().executable()
     }
 
     /// Returns the epoch that this account will next owe rent by parsing
@@ -78,6 +90,51 @@ impl<'a, M: TieredAccountMeta> ReadableAccount for TieredReadableAccount<'a, M> 
 
     /// Returns the data associated to this account.
     fn data(&self) -> &'a [u8] {
-        self.meta.account_data(self.account_block)
+        self.data()
+    }
+}
+
+#[derive(Debug)]
+pub enum TieredStorageReader {
+    // Cold(ColdStorageReader),
+    Hot(HotStorageReader),
+}
+
+impl TieredStorageReader {
+    pub fn new_from_path<P: AsRef<Path>>(path: P) -> TieredStorageResult<Self> {
+        let footer = TieredStorageFooter::new_from_path(&path)?;
+
+        match footer.account_meta_format {
+            // AccountMetaFormat::Cold => Ok(Self::Cold(ColdStorageReader::new_from_file(path)?)),
+            AccountMetaFormat::Hot => Ok(Self::Hot(HotStorageReader::new_from_path(path)?)),
+        }
+    }
+
+    pub fn num_accounts(&self) -> usize {
+        match self {
+            // Self::Cold(cs) => cs.num_accounts(),
+            Self::Hot(hs) => hs.num_accounts(),
+        }
+    }
+
+    pub fn account_matches_owners(
+        &self,
+        multiplied_index: usize,
+        owners: &[&Pubkey],
+    ) -> Result<usize, MatchAccountOwnerError> {
+        match self {
+            // Self::Cold(cs) => cs.account_matches_owners(multiplied_index, owners),
+            Self::Hot(hs) => hs.account_matches_owners(multiplied_index, owners),
+        }
+    }
+
+    pub fn get_account<'a>(
+        &'a self,
+        multiplied_index: usize,
+    ) -> Option<(StoredAccountMeta<'a>, usize)> {
+        match self {
+            // Self::Cold(cs) => cs.get_account(multiplied_index),
+            Self::Hot(hs) => hs.get_account(multiplied_index),
+        }
     }
 }
