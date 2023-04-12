@@ -78,10 +78,6 @@ pub trait TieredAccountMeta {
         unimplemented!();
     }
 
-    fn with_optional_fields(&mut self, _fields: &AccountMetaOptionalFields) -> &mut Self {
-        unimplemented!();
-    }
-
     fn lamports(&self) -> u64;
     fn block_offset(&self) -> u64;
     fn set_block_offset(&mut self, offset: u64);
