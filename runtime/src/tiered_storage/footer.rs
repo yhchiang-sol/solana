@@ -119,6 +119,9 @@ pub enum AccountIndexFormat {
     // Any query from account hash to account meta requires linear search.
     #[default]
     Linear = 0u64,
+    // Similar to index, but this format also stores the offset of each account
+    // meta in the index block.
+    LinearIndex = 1u64,
 }
 
 #[derive(Debug)]
@@ -212,7 +215,7 @@ impl TieredStorageFooter {
         Ok(())
     }
 
-    fn new_from_footer_block(ads_file: &TieredStorageFile) -> std::io::Result<Self> {
+    pub fn new_from_footer_block(ads_file: &TieredStorageFile) -> std::io::Result<Self> {
         let mut footer_size: u64 = 0;
         let mut footer_version: u64 = 0;
         let mut magic_number = TieredStorageMagicNumber::new();

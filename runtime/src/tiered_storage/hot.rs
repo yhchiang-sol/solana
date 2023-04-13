@@ -12,6 +12,7 @@ use {
                 TieredFileFormat, TieredStorageFooter, TieredStorageMagicNumber,
                 FOOTER_MAGIC_NUMBER, FOOTER_TAIL_SIZE,
             },
+            index::HotAccountIndex,
             meta::{
                 get_compressed_block_size, AccountMetaFlags, AccountMetaOptionalFields,
                 TieredAccountMeta, ACCOUNT_DATA_ENTIRE_BLOCK, DEFAULT_ACCOUNT_HASH,
@@ -27,11 +28,10 @@ use {
     std::{collections::HashMap, fs::OpenOptions, mem::size_of, option::Option, path::Path},
 };
 
-const BLOCK_OFFSET_MASK: u64 = 0x00ff_ffff_ffff_ffff;
-const CLEAR_BLOCK_OFFSET_MASK: u64 = 0xff00_0000_0000_0000;
-const PADDINGS_MASK: u64 = 0x0700_0000_0000_0000;
-const CLEAR_PADDINGS_MASK: u64 = 0xf8ff_ffff_ffff_ffff;
-const PADDINGS_SHIFT: u64 = 56;
+const OWNER_INDEX_MASK: u32 = 0x1fff_ffff;
+const CLEAR_BLOCK_PADDING_MASK: u32 = OWNER_INDEX_MASK;
+const BLOCK_PADDING_MASK: u32 = 0xe000_0000;
+const BLOCK_PADDING_SHIFT: u32 = 29;
 
 pub static HOT_FORMAT: TieredFileFormat = TieredFileFormat {
     meta_entry_size: std::mem::size_of::<HotAccountMeta>(),
@@ -48,8 +48,8 @@ pub struct HotAccountMeta {
     // the high 8-bits are used to store padding and data block
     // format information.
     // Use block_offset() to obtain the actual block offset.
-    block_offset_info: u64,
-    owner_index: u32,
+    // block_offset_info: u64,
+    padding_and_owner_index: u32,
     flags: u32,
 }
 
@@ -64,8 +64,10 @@ impl HotAccountMeta {
 
     fn set_padding_bytes(&mut self, paddings: u8) {
         assert!(paddings <= 7);
-        self.block_offset_info &= CLEAR_PADDINGS_MASK;
-        self.block_offset_info |= (paddings as u64) << PADDINGS_SHIFT;
+        self.padding_and_owner_index &= CLEAR_BLOCK_PADDING_MASK;
+        self.padding_and_owner_index |= (paddings as u32) << BLOCK_PADDING_SHIFT;
+        // self.block_offset_info &= CLEAR_PADDINGS_MASK;
+        // self.block_offset_info |= (paddings as u64) << PADDINGS_SHIFT;
     }
 
     fn get_type<'a, T>(data_block: &'a [u8], offset: usize) -> &'a T {
@@ -84,8 +86,9 @@ impl TieredAccountMeta for HotAccountMeta {
     fn new() -> Self {
         HotAccountMeta {
             lamports: 0,
-            block_offset_info: 0,
-            owner_index: 0,
+            // block_offset_info: 0,
+            // owner_index: 0,
+            padding_and_owner_index: 0,
             flags: 0,
         }
     }
@@ -114,7 +117,8 @@ impl TieredAccountMeta for HotAccountMeta {
     }
 
     fn with_owner_local_id(&mut self, owner_index: u32) -> &mut Self {
-        self.owner_index = owner_index;
+        assert!(owner_index <= OWNER_INDEX_MASK);
+        self.padding_and_owner_index |= owner_index & OWNER_INDEX_MASK;
         self
     }
 
@@ -144,29 +148,24 @@ impl TieredAccountMeta for HotAccountMeta {
     }
 
     fn block_offset(&self) -> u64 {
-        (self.block_offset_info & BLOCK_OFFSET_MASK).saturating_mul(8)
+        0
     }
 
     fn padding_bytes(&self) -> u8 {
-        ((self.block_offset_info & PADDINGS_MASK) >> PADDINGS_SHIFT)
+        ((self.padding_and_owner_index & BLOCK_PADDING_MASK) >> BLOCK_PADDING_SHIFT)
             .try_into()
             .unwrap()
     }
 
-    fn set_block_offset(&mut self, offset: u64) {
-        assert!((offset >> 3) <= BLOCK_OFFSET_MASK);
-        self.block_offset_info &= CLEAR_BLOCK_OFFSET_MASK;
-        self.block_offset_info |= offset >> 3;
+    fn set_block_offset(&mut self, _offset: u64) {
     }
 
     fn intra_block_offset(&self) -> u16 {
-        // hot meta always have intra block offset equals to 0 except
-        // its block_offset_info indocates it is inside a shared block.
         0
     }
 
     fn owner_local_id(&self) -> u32 {
-        self.owner_index
+        self.padding_and_owner_index & OWNER_INDEX_MASK
     }
 
     fn flags_get(&self, bit_field: u32) -> bool {
@@ -234,14 +233,12 @@ impl TieredAccountMeta for HotAccountMeta {
     }
 
     fn stored_size(
-        footer: &TieredStorageFooter,
-        metas: &Vec<impl TieredAccountMeta>,
-        i: usize,
+        _footer: &TieredStorageFooter,
+        _metas: &Vec<impl TieredAccountMeta>,
+        _i: usize,
     ) -> usize {
-        // hot storage does not compress so the returned size is the data size.
-        let data_size = get_compressed_block_size(footer, metas, i);
-
-        return std::mem::size_of::<HotAccountMeta>() + data_size;
+        // TODO(yhchiang): need a new way to obtain data size
+        std::mem::size_of::<HotAccountMeta>()
     }
 }
 
@@ -304,15 +301,23 @@ impl HotStorageReader {
     }
 
     fn get_account_meta<'a>(&'a self, index: usize) -> std::io::Result<&'a HotAccountMeta> {
-        let offset = self.footer.account_metas_offset
-            + (self.footer.account_meta_entry_size as u64 * index as u64);
+        // COMMENT(yhchiang): MetaAndData
+        let offset = HotAccountIndex::get_meta_offset(&self.map, &self.footer, index)? as usize;
+        self.get_account_meta_from_offset(offset)
+    }
+
+    fn get_account_meta_from_offset<'a>(
+        &'a self,
+        offset: usize,
+    ) -> std::io::Result<&'a HotAccountMeta> {
         let (meta, _): (&'a HotAccountMeta, _) = get_type(&self.map, offset as usize)?;
         Ok(meta)
     }
 
     fn get_account_address<'a>(&'a self, index: usize) -> std::io::Result<&'a Pubkey> {
-        let offset =
-            self.footer.account_pubkeys_offset as usize + (std::mem::size_of::<Pubkey>() * index);
+        let offset = HotAccountIndex::get_pubkey_offset(&self.footer, index);
+        // let offset =
+        //    self.footer.account_pubkeys_offset as usize + (std::mem::size_of::<Pubkey>() * index);
         let (pubkey, _): (&'a Pubkey, _) = get_type(&self.map, offset)?;
         Ok(pubkey)
     }
@@ -320,31 +325,48 @@ impl HotStorageReader {
     fn get_owner_address<'a>(&'a self, index: usize) -> std::io::Result<&'a Pubkey> {
         let meta = self.get_account_meta(index)?;
         let offset = self.footer.owners_offset as usize
-            + (std::mem::size_of::<Pubkey>() * (meta.owner_index as usize));
+            + (std::mem::size_of::<Pubkey>() * (meta.owner_local_id() as usize));
         let (pubkey, _): (&'a Pubkey, _) = get_type(&self.map, offset)?;
         Ok(pubkey)
     }
 
-    fn get_data_block_size(&self, meta: &HotAccountMeta, index: usize) -> usize {
+    fn get_data_block_size(&self, meta_offset: usize, index: usize) -> usize {
         if (index + 1) as u32 == self.footer.account_meta_count {
-            return (self.footer.account_metas_offset - meta.block_offset()) as usize;
+            assert!(self.footer.account_pubkeys_offset as usize > meta_offset);
+            println!(
+                "self.footer.account_pubkeys_offset = {}",
+                self.footer.account_pubkeys_offset
+            );
+            println!("meta_offset = {}", meta_offset);
+            println!(
+                "std::mem::size_of::<HotAccountMeta>() = {}",
+                std::mem::size_of::<HotAccountMeta>()
+            );
+            println!(
+                "DATA BLOCK SIZE = {}",
+                self.footer.account_pubkeys_offset as usize
+                    - meta_offset
+                    - std::mem::size_of::<HotAccountMeta>()
+            );
+            return self.footer.account_pubkeys_offset as usize
+                - meta_offset
+                - std::mem::size_of::<HotAccountMeta>();
         }
 
-        let next_meta = self.get_account_meta(index + 1).unwrap();
-        assert!(next_meta.block_offset() >= meta.block_offset());
+        let next_meta_offset =
+            HotAccountIndex::get_meta_offset(&self.map, &self.footer, index + 1).unwrap() as usize;
+        println!("next_meta_offset = {}", next_meta_offset);
 
-        next_meta.block_offset().saturating_sub(meta.block_offset()) as usize
+        next_meta_offset
+            .saturating_sub(meta_offset)
+            .saturating_sub(std::mem::size_of::<HotAccountMeta>())
     }
 
-    fn get_data_block<'a>(
-        &'a self,
-        meta: &HotAccountMeta,
-        index: usize,
-    ) -> std::io::Result<&'a [u8]> {
+    fn get_data_block<'a>(&'a self, meta_offset: usize, index: usize) -> std::io::Result<&'a [u8]> {
         let (data, _): (&'a [u8], _) = get_slice(
             &self.map,
-            meta.block_offset() as usize,
-            self.get_data_block_size(meta, index),
+            meta_offset + std::mem::size_of::<HotAccountMeta>(),
+            self.get_data_block_size(meta_offset, index),
         )?;
         Ok(data)
     }
@@ -360,10 +382,13 @@ impl HotStorageReader {
             return None;
         }
 
-        let meta: &'a HotAccountMeta = self.get_account_meta(index).unwrap();
+        let meta_offset =
+            HotAccountIndex::get_meta_offset(&self.map, &self.footer, index).unwrap() as usize;
+        println!("META OFFSET = {}", meta_offset);
+        let meta: &'a HotAccountMeta = self.get_account_meta_from_offset(meta_offset).unwrap();
         let address: &'a Pubkey = self.get_account_address(index).unwrap();
         let owner: &'a Pubkey = self.get_owner_address(index).unwrap();
-        let data_block: &'a [u8] = self.get_data_block(meta, index).unwrap();
+        let data_block: &'a [u8] = self.get_data_block(meta_offset, index).unwrap();
 
         return Some((
             StoredAccountMeta::Hot(TieredStoredAccountMeta {
@@ -402,21 +427,21 @@ pub mod tests {
     #[test]
     fn test_hot_account_meta_layout() {
         assert_eq!(offset_of!(HotAccountMeta, lamports), 0x00);
-        assert_eq!(offset_of!(HotAccountMeta, block_offset_info), 0x08);
-        assert_eq!(offset_of!(HotAccountMeta, owner_index), 0x10);
-        assert_eq!(offset_of!(HotAccountMeta, flags), 0x14);
-        assert_eq!(std::mem::size_of::<HotAccountMeta>(), 24);
+        // assert_eq!(offset_of!(HotAccountMeta, block_offset_info), 0x08);
+        assert_eq!(offset_of!(HotAccountMeta, padding_and_owner_index), 0x08);
+        assert_eq!(offset_of!(HotAccountMeta, flags), 0x0C);
+        assert_eq!(std::mem::size_of::<HotAccountMeta>(), 16);
     }
 
     #[test]
     fn test_hot_offset_and_padding() {
-        let offset: u64 = 0x07ff_ef98_7654_3218;
+        let owner_index: u32 = 0x1fff_ef98;
         let length: u64 = 153233;
         let mut hot_meta = HotAccountMeta::new();
         hot_meta
-            .with_block_offset(offset)
+            .with_owner_local_id(owner_index)
             .with_uncompressed_data_size(length);
-        assert_eq!(hot_meta.block_offset(), offset);
+        assert_eq!(hot_meta.owner_local_id(), owner_index);
         assert_eq!(hot_meta.padding_bytes(), ((8 - (length % 8)) % 8) as u8);
     }
 
@@ -427,7 +452,7 @@ pub mod tests {
         const TEST_LAMPORT: u64 = 2314232137;
         const BLOCK_OFFSET: u64 = 56987;
         const PADDINGS: u8 = 5;
-        const OWNER_LOCAL_ID: u32 = 54;
+        const OWNER_LOCAL_ID: u32 = 0x1fef_1234;
         const TEST_RENT_EPOCH: Epoch = 7;
         const TEST_WRITE_VERSION: StoredMetaWriteVersion = 0;
 
@@ -466,14 +491,13 @@ pub mod tests {
     }
 
     #[test]
-    fn test_max_hot_offset_and_padding() {
-        let mut hot_meta = HotAccountMeta::new();
-        // hot offset must be a multiple of 8.
-        let offset: u64 = 0x07ff_ffff_ffff_fff8;
+    fn test_max_owner_index_and_padding() {
+        let owner_index: u32 = 0x1fff_ffff;
         let paddings: u8 = 7;
-        hot_meta.set_block_offset(offset);
+        let mut hot_meta = HotAccountMeta::new();
+        hot_meta.with_owner_local_id(owner_index);
         hot_meta.set_padding_bytes(paddings);
-        assert_eq!(hot_meta.block_offset(), offset);
+        assert_eq!(hot_meta.owner_local_id(), owner_index);
         assert_eq!(hot_meta.padding_bytes(), paddings);
     }
 
@@ -486,7 +510,7 @@ pub mod tests {
             account_index_format: AccountIndexFormat::Linear,
             data_block_format: AccountDataBlockFormat::AlignedRaw,
             account_meta_count: 300,
-            account_meta_entry_size: 24,
+            account_meta_entry_size: 16,
             account_data_block_size: 4096,
             owner_count: 250,
             owner_entry_size: 32,

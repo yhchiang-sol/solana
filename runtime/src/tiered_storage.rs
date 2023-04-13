@@ -3,6 +3,7 @@ pub mod data_block;
 pub mod file;
 pub mod footer;
 pub mod hot;
+pub mod index;
 pub mod meta;
 pub mod mmap_utils;
 pub mod reader;
@@ -267,9 +268,10 @@ pub mod tests {
                 AppendVec,
             },
             tiered_storage::{
-                cold::COLD_FORMAT,
+                // cold::COLD_FORMAT,
                 footer::{TieredFileFormat, TieredStorageFooter, FOOTER_SIZE},
                 hot::HOT_FORMAT,
+                index::HotAccountIndex,
                 reader::TieredStorageReader,
                 TieredStorage, ACCOUNTS_DATA_STORAGE_FORMAT_VERSION, ACCOUNT_DATA_BLOCK_SIZE,
             },
@@ -454,7 +456,7 @@ pub mod tests {
             account_metas_offset: footer.account_metas_offset,
             account_pubkeys_offset: footer.account_pubkeys_offset,
             owners_offset: footer.account_pubkeys_offset
-                + (account_count * mem::size_of::<Pubkey>()) as u64,
+                + (account_count * HotAccountIndex::entry_size()) as u64,
             // TODO(yhchiang): reach out Brooks on how to obtain the new hash
             hash: footer.hash,
             // TODO(yhchiang): fix this
@@ -499,7 +501,7 @@ pub mod tests {
         ads_writer_test_help(
             "test_write_from_append_vec_one_small_cold",
             &[255],
-            &COLD_FORMAT,
+            &HOT_FORMAT, //&COLD_FORMAT YHCHIANG
         );
     }
 
@@ -513,7 +515,7 @@ pub mod tests {
         ads_writer_test_help(
             "test_write_from_append_vec_one_big_cold",
             &[25500],
-            &COLD_FORMAT,
+            &HOT_FORMAT, //&COLD_FORMAT YHCHIANG
         );
     }
 
@@ -527,7 +529,7 @@ pub mod tests {
         ads_writer_test_help(
             "test_write_from_append_vec_one_10_mb_cold",
             &[10 * 1024 * 1024],
-            &COLD_FORMAT,
+            &HOT_FORMAT, //&COLD_FORMAT YHCHIANG
         );
     }
 
@@ -541,7 +543,7 @@ pub mod tests {
         ads_writer_test_help(
             "test_write_from_append_vec_multiple_blobs_cold",
             &[5000, 6000, 7000, 8000, 5500, 10241023, 9999],
-            &COLD_FORMAT,
+            &HOT_FORMAT, //&COLD_FORMAT YHCHIANG
         );
     }
 
@@ -555,7 +557,7 @@ pub mod tests {
         ads_writer_test_help(
             "test_write_from_append_vec_one_data_block_cold",
             &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            &COLD_FORMAT,
+            &HOT_FORMAT, //&COLD_FORMAT YHCHIANG
         );
     }
 
@@ -573,7 +575,7 @@ pub mod tests {
             &[
                 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1000, 2000, 3000, 4000, 9, 8, 7, 6, 5, 4, 3, 2, 1,
             ],
-            &COLD_FORMAT,
+            &HOT_FORMAT, //&COLD_FORMAT YHCHIANG
         );
     }
 }

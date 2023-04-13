@@ -13,8 +13,11 @@ use {
             cold::ColdAccountMeta,
             data_block::AccountDataBlockWriter,
             file::TieredStorageFile,
-            footer::{AccountMetaFormat, TieredFileFormat, TieredStorageFooter},
+            footer::{
+                AccountMetaFormat, TieredFileFormat, TieredStorageFooter,
+            },
             hot::HotAccountMeta,
+            index::{AccountIndexWriterEntry, HotAccountIndex},
             meta::{AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta},
         },
     },
@@ -92,12 +95,15 @@ impl TieredStorageWriter {
 
         let mut data_block_writer = self.new_data_block_writer(&footer);
         footer.account_data_block_size = ACCOUNT_DATA_BLOCK_SIZE as u64;
+        footer.account_meta_entry_size = std::mem::size_of::<W>() as u32;
+        footer.account_metas_offset = 0;
 
         let mut buffered_account_metas = Vec::<W>::new();
         let mut buffered_account_pubkeys: Vec<Pubkey> = vec![];
 
         let len = accounts.accounts.len();
         let mut input_pubkey_map: HashMap<Pubkey, usize> = HashMap::with_capacity(len);
+        let mut account_index_entries = Vec::<AccountIndexWriterEntry>::new();
 
         for i in skip..len {
             // TODO(yhchiang): here we don't need to convert it to
@@ -142,6 +148,7 @@ impl TieredStorageWriter {
                     &mut buffered_account_metas,
                     &mut buffered_account_pubkeys,
                     &mut dummy_hash,
+                    &mut account_index_entries,
                 )
                 .unwrap();
         }
@@ -164,9 +171,10 @@ impl TieredStorageWriter {
         assert_eq!(buffered_account_pubkeys.len(), 0);
         assert_eq!(footer.account_meta_count, account_metas.len() as u32);
 
-        self.write_account_metas_block(&mut cursor, &mut footer, &account_metas)
-            .ok()?;
-        self.write_account_pubkeys_block(&mut cursor, &mut footer, &account_pubkeys)
+        // COMMENT(yhchiang): MetaAndData
+        // self.write_account_metas_block(&mut cursor, &mut footer, &account_metas)
+        //     .ok()?;
+        self.write_account_pubkeys_block(&mut cursor, &mut footer, &account_index_entries)
             .ok()?;
 
         self.write_owners_block(&mut cursor, &mut footer, &owners_table.owners_vec)
@@ -266,11 +274,16 @@ impl TieredStorageWriter {
         &self,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
-        pubkeys: &Vec<Pubkey>,
+        index_entries: &Vec<AccountIndexWriterEntry>,
     ) -> std::io::Result<()> {
         footer.account_pubkeys_offset = *cursor;
-
-        self.write_pubkeys_block(cursor, pubkeys)
+        match footer.account_meta_format {
+            AccountMetaFormat::Hot => {
+                *cursor += HotAccountIndex::write_index_block(&self.storage, index_entries)?;
+            }
+            AccountMetaFormat::Cold => unimplemented!(),
+        }
+        Ok(())
     }
 
     fn write_owners_block(
@@ -339,6 +352,7 @@ impl TieredStorageWriter {
         buffered_account_metas: &mut Vec<T>,
         buffered_account_pubkeys: &mut Vec<Pubkey>,
         _hash: &mut Hash,
+        account_index_entries: &mut Vec<AccountIndexWriterEntry>,
     ) -> std::io::Result<AccountDataBlockWriter> {
         if !account.sanitize() {
             // Not Ok
@@ -350,23 +364,24 @@ impl TieredStorageWriter {
             write_version_obsolete: Some(account.write_version()),
         };
 
-        if T::is_blob_account_data(account.data_len()) {
-            self.write_blob_account_data_block(
+        let account_raw_size =
+            std::mem::size_of::<T>() + account.data_len() as usize + optional_fields.size();
+
+        if T::is_blob_account_data(account_raw_size as u64) {
+            account_index_entries.push(self.write_blob_account_data_block(
                 cursor,
                 footer,
                 account_metas,
                 account_pubkeys,
                 owners_table,
                 account,
-            )?;
+            )?);
             return Ok(data_block);
         }
 
         // If the current data cannot fit in the current block, then
         // persist the current block.
-        if data_block.len() + account.data_len() as usize + optional_fields.size()
-            > ACCOUNT_DATA_BLOCK_SIZE
-        {
+        if data_block.len() + account_raw_size > ACCOUNT_DATA_BLOCK_SIZE {
             self.flush_account_data_block(
                 cursor,
                 footer,
@@ -382,8 +397,11 @@ impl TieredStorageWriter {
         let owner_local_id = owners_table.check_and_add(account.owner());
         let local_offset = data_block.len();
 
-        data_block.write(account.data(), account.data_len() as usize)?;
-        optional_fields.write(&mut data_block)?;
+        account_index_entries.push(AccountIndexWriterEntry {
+            pubkey: *account.pubkey(),
+            block_offset: *cursor,
+            intra_block_offset: local_offset as u64,
+        });
 
         let mut meta = T::new();
         meta.with_lamports(account.lamports())
@@ -397,6 +415,14 @@ impl TieredStorageWriter {
                     .to_value(),
             )
             .with_optional_fields(&optional_fields);
+
+        // COMMENT(yhchiang): MetaAndData
+        {
+            data_block.write_type(&meta)?;
+        }
+
+        data_block.write(account.data(), account.data_len() as usize)?;
+        optional_fields.write(&mut data_block)?;
 
         buffered_account_metas.push(meta);
         buffered_account_pubkeys.push(*account.pubkey());
@@ -412,12 +438,18 @@ impl TieredStorageWriter {
         account_pubkeys: &mut Vec<Pubkey>,
         owners_table: &mut AccountOwnerTable,
         account: &StoredAccountMeta,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<AccountIndexWriterEntry> {
         let owner_local_id = owners_table.check_and_add(account.owner());
         let optional_fields = AccountMetaOptionalFields {
             rent_epoch: Some(account.rent_epoch()),
             account_hash: Some(*account.hash()),
             write_version_obsolete: Some(account.write_version()),
+        };
+
+        let index_entry = AccountIndexWriterEntry {
+            pubkey: *account.pubkey(),
+            block_offset: *cursor,
+            intra_block_offset: 0,
         };
 
         let mut meta = T::new();
@@ -434,6 +466,11 @@ impl TieredStorageWriter {
             .with_optional_fields(&optional_fields);
 
         let mut writer = AccountDataBlockWriter::new(footer.data_block_format);
+        // COMMENT(yhchiang): MetaAndData
+        {
+            writer.write_type(&meta)?;
+        }
+
         writer.write(account.data(), account.data_len() as usize)?;
         if meta.padding_bytes() > 0 {
             let padding = [0u8; 8];
@@ -451,7 +488,7 @@ impl TieredStorageWriter {
         *cursor += compressed_length as u64;
         footer.account_meta_count += 1;
 
-        Ok(())
+        Ok(index_entry)
     }
 
     #[allow(dead_code)]
@@ -465,6 +502,7 @@ impl TieredStorageWriter {
         let mut account_pubkeys: Vec<Pubkey> = vec![];
         let mut owners_table = AccountOwnerTable::new();
         let mut hash: Hash = Hash::new_unique();
+        let mut account_index_entries = Vec::<AccountIndexWriterEntry>::new();
 
         match footer.account_meta_format {
             AccountMetaFormat::Hot => {
@@ -476,9 +514,11 @@ impl TieredStorageWriter {
                     &mut account_pubkeys,
                     &mut owners_table,
                     &mut hash,
+                    &mut account_index_entries,
                     &append_vec,
                 )?;
-                self.write_account_metas_block(&mut cursor, &mut footer, &account_metas)?;
+                footer.account_metas_offset = 0;
+                footer.account_meta_entry_size = std::mem::size_of::<HotAccountMeta>() as u32;
             }
             AccountMetaFormat::Cold => {
                 let mut account_metas = Vec::<ColdAccountMeta>::new();
@@ -489,12 +529,14 @@ impl TieredStorageWriter {
                     &mut account_pubkeys,
                     &mut owners_table,
                     &mut hash,
+                    &mut account_index_entries,
                     &append_vec,
                 )?;
-                self.write_account_metas_block(&mut cursor, &mut footer, &account_metas)?;
+                footer.account_metas_offset = 0;
+                footer.account_meta_entry_size = std::mem::size_of::<ColdAccountMeta>() as u32;
             }
         }
-        self.write_account_pubkeys_block(&mut cursor, &mut footer, &account_pubkeys)?;
+        self.write_account_pubkeys_block(&mut cursor, &mut footer, &account_index_entries)?;
         self.write_owners_block(&mut cursor, &mut footer, &owners_table.owners_vec)?;
 
         assert_eq!(
@@ -506,7 +548,6 @@ impl TieredStorageWriter {
         Ok(())
     }
 
-    #[allow(dead_code)]
     fn write_account_data_blocks<T: TieredAccountMeta>(
         &self,
         cursor: &mut u64,
@@ -516,6 +557,7 @@ impl TieredStorageWriter {
         owners_table: &mut AccountOwnerTable,
         // TODO(yhchiang): update hash
         _hash: &mut Hash,
+        account_index_entries: &mut Vec<AccountIndexWriterEntry>,
         append_vec: &AppendVec,
     ) -> std::io::Result<()> {
         let mut offset = 0;
@@ -538,6 +580,7 @@ impl TieredStorageWriter {
                 &mut buffered_account_metas,
                 &mut buffered_account_pubkeys,
                 _hash,
+                account_index_entries,
             )?;
         }
 

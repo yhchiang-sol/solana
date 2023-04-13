@@ -16,6 +16,7 @@ lazy_static! {
 
 pub const ACCOUNT_DATA_ENTIRE_BLOCK: u16 = std::u16::MAX;
 
+// TODO(yhchiang): this function needs to be fixed.
 pub(crate) fn get_compressed_block_size(
     footer: &TieredStorageFooter,
     metas: &Vec<impl TieredAccountMeta>,
@@ -206,6 +207,7 @@ pub trait TieredAccountMeta {
         if self.flags_get(AccountMetaFlags::HAS_DATA_LENGTH) {
             size_in_bytes += size_of::<u64>();
         }
+        println!("OPTIONAL_FIELDS_SIZE = {}", size_in_bytes);
 
         size_in_bytes
     }
