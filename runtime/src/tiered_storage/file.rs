@@ -6,67 +6,76 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct TieredStorageFile {
-    pub file: File,
-}
+pub struct TieredStorageFile(pub File);
 
 impl TieredStorageFile {
-    /// Creates a tiered-storage file.
-    /// If the create flag is false, it will open an existing file
-    /// in read-only mode.
-    pub fn new<P: AsRef<Path>>(file_path: P, create: bool) -> Self {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(create)
-            .create(create)
-            .open(file_path.as_ref())
-            .map_err(|e| {
-                panic!(
-                    "Unable to {} data file {} in current dir({:?}): {:?}",
-                    if create { "create" } else { "open" },
-                    file_path.as_ref().display(),
-                    std::env::current_dir(),
-                    e
-                );
-            })
-            .unwrap();
-        Self { file }
+
+    pub fn new_readonly(file_path: impl AsRef<Path>) -> Self {
+        Self(
+            OpenOptions::new()
+                .read(true)
+                .create(false)
+                .open(&file_path)
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "Unable to open {:?} as a read-only TieredStorageFile at {:?}: {:?}",
+                        file_path.as_ref().display(),
+                        std::env::current_dir(),
+                        e
+                    );
+                })
+        )
+    }
+
+    pub fn new_writable(file_path: impl AsRef<Path>) -> Self {
+        Self(
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(&file_path)
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "Unable to create {:?} as a writable TieredStorageFile at {:?}: {:?}",
+                        file_path.as_ref().display(),
+                        std::env::current_dir(),
+                        e,
+                    );
+                })
+        )
     }
 
     pub fn write_type<T>(&self, value: &T) -> Result<usize, std::io::Error> {
-        unsafe {
-            let ptr =
-                std::slice::from_raw_parts((value as *const T) as *const u8, mem::size_of::<T>());
-            (&self.file).write_all(ptr)?;
-        }
+        let ptr = value as *const _ as *const u8;
+        let slice = unsafe {std::slice::from_raw_parts(ptr, mem::size_of::<T>())};
+        (&self.0).write_all(slice)?;
+
         Ok(std::mem::size_of::<T>())
     }
 
     pub fn read_type<T>(&self, value: &mut T) -> Result<(), std::io::Error> {
-        unsafe {
-            let ptr =
-                std::slice::from_raw_parts_mut((value as *mut T) as *mut u8, mem::size_of::<T>());
-            (&self.file).read_exact(ptr)?;
-        }
+        let ptr = value as *mut _ as *mut u8;
+        let slice = unsafe {std::slice::from_raw_parts_mut(ptr, mem::size_of::<T>())};
+        (&self.0).read_exact(slice)?;
+
         Ok(())
     }
 
     pub fn seek(&self, offset: u64) -> Result<u64, std::io::Error> {
-        (&self.file).seek(SeekFrom::Start(offset))
+        (&self.0).seek(SeekFrom::Start(offset))
     }
 
     pub fn seek_from_end(&self, offset: i64) -> Result<u64, std::io::Error> {
-        (&self.file).seek(SeekFrom::End(offset))
+        (&self.0).seek(SeekFrom::End(offset))
     }
 
     pub fn write_bytes(&self, bytes: &[u8]) -> Result<usize, std::io::Error> {
-        (&self.file).write_all(bytes)?;
+        (&self.0).write_all(bytes)?;
 
         Ok(bytes.len())
     }
 
     pub fn read_bytes(&self, buffer: &mut [u8]) -> Result<(), std::io::Error> {
-        (&self.file).read_exact(buffer)?;
+        (&self.0).read_exact(buffer)?;
 
         Ok(())
     }

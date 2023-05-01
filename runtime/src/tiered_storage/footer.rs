@@ -19,21 +19,11 @@ pub const FOOTER_MAGIC_NUMBER: u64 = 0x502A2AB5; // SOLALABS -> SOLANA LABS
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[repr(C)]
-pub struct TieredStorageMagicNumber {
-    pub magic: u64,
-}
-
-impl TieredStorageMagicNumber {
-    pub fn new() -> Self {
-        Self {
-            magic: FOOTER_MAGIC_NUMBER,
-        }
-    }
-}
+pub struct TieredStorageMagicNumber(pub u64);
 
 impl Default for TieredStorageMagicNumber {
     fn default() -> Self {
-        Self::new()
+        Self(FOOTER_MAGIC_NUMBER)
     }
 }
 
@@ -54,8 +44,8 @@ impl Default for TieredStorageMagicNumber {
 #[serde(into = "u64", try_from = "u64")]
 pub enum AccountMetaFormat {
     #[default]
-    Hot = 0u64,
-    Cold = 1u64,
+    Hot = 0,
+    Cold = 1,
 }
 
 #[repr(u64)]
@@ -75,8 +65,8 @@ pub enum AccountMetaFormat {
 #[serde(into = "u64", try_from = "u64")]
 pub enum AccountDataBlockFormat {
     #[default]
-    AlignedRaw = 0u64,
-    Lz4 = 1u64,
+    AlignedRaw = 0,
+    Lz4 = 1,
 }
 
 #[repr(u64)]
@@ -96,7 +86,7 @@ pub enum AccountDataBlockFormat {
 #[serde(into = "u64", try_from = "u64")]
 pub enum OwnersBlockFormat {
     #[default]
-    LocalIndex = 0u64,
+    LocalIndex = 0,
 }
 
 #[repr(u64)]
@@ -118,10 +108,10 @@ pub enum AccountIndexFormat {
     // This format does not support any fast lookup.
     // Any query from account hash to account meta requires linear search.
     #[default]
-    Linear = 0u64,
+    Linear = 0,
     // Similar to index, but this format also stores the offset of each account
     // meta in the index block.
-    LinearIndex = 1u64,
+    LinearIndex = 1,
 }
 
 #[derive(Debug)]
@@ -172,12 +162,6 @@ pub struct TieredStorageFooter {
     // pub magic_number: u64,
 }
 
-impl TieredStorageFooter {
-    pub fn new() -> Self {
-        Self { ..Self::default() }
-    }
-}
-
 impl Default for TieredStorageFooter {
     fn default() -> Self {
         Self {
@@ -202,27 +186,27 @@ impl Default for TieredStorageFooter {
 }
 
 impl TieredStorageFooter {
-    pub fn new_from_path<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let storage = TieredStorageFile::new(path, false /* create */);
+    pub fn new_from_path(path: impl AsRef<Path>) -> std::io::Result<Self> {
+        let storage = TieredStorageFile::new_readonly(path);
         Self::new_from_footer_block(&storage)
     }
 
-    pub fn write_footer_block(&self, ads_file: &TieredStorageFile) -> std::io::Result<()> {
-        ads_file.write_type(self)?;
-        ads_file.write_type(&TieredStorageMagicNumber::default())?;
+    pub fn write_footer_block(&self, file: &TieredStorageFile) -> std::io::Result<()> {
+        file.write_type(self)?;
+        file.write_type(&TieredStorageMagicNumber::default())?;
 
         Ok(())
     }
 
-    pub fn new_from_footer_block(ads_file: &TieredStorageFile) -> std::io::Result<Self> {
+    pub fn new_from_footer_block(file: &TieredStorageFile) -> std::io::Result<Self> {
         let mut footer_size: u64 = 0;
         let mut footer_version: u64 = 0;
-        let mut magic_number = TieredStorageMagicNumber::new();
+        let mut magic_number = TieredStorageMagicNumber(0);
 
-        ads_file.seek_from_end(-FOOTER_TAIL_SIZE)?;
-        ads_file.read_type(&mut footer_size)?;
-        ads_file.read_type(&mut footer_version)?;
-        ads_file.read_type(&mut magic_number)?;
+        file.seek_from_end(-FOOTER_TAIL_SIZE)?;
+        file.read_type(&mut footer_size)?;
+        file.read_type(&mut footer_version)?;
+        file.read_type(&mut magic_number)?;
 
         if magic_number != TieredStorageMagicNumber::default() {
             return Err(std::io::Error::new(
@@ -231,9 +215,9 @@ impl TieredStorageFooter {
             ));
         }
 
-        let mut footer = Self::new();
-        ads_file.seek_from_end(-(footer_size as i64))?;
-        ads_file.read_type(&mut footer)?;
+        let mut footer = Self::default();
+        file.seek_from_end(-(footer_size as i64))?;
+        file.read_type(&mut footer)?;
 
         Ok(footer)
     }
@@ -259,17 +243,12 @@ impl TieredStorageFooter {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use {
+        super::*,
         crate::{
             append_vec::test_utils::get_append_vec_path,
-            tiered_storage::{
-                file::TieredStorageFile,
-                footer::{
-                    AccountDataBlockFormat, AccountIndexFormat, AccountMetaFormat,
-                    OwnersBlockFormat, TieredStorageFooter, FOOTER_FORMAT_VERSION, FOOTER_SIZE,
-                },
-            },
+            tiered_storage::file::TieredStorageFile,
         },
         memoffset::offset_of,
         solana_sdk::hash::Hash,
@@ -309,8 +288,8 @@ pub mod tests {
 
         // Persist the expected footer.
         {
-            let ads_file = TieredStorageFile::new(&path.path, true);
-            expected_footer.write_footer_block(&ads_file).unwrap();
+            let file = TieredStorageFile::new_writable(&path.path);
+            expected_footer.write_footer_block(&file).unwrap();
         }
 
         // Reopen the same storage, and expect the persisted footer is

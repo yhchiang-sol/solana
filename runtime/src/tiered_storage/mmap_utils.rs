@@ -4,11 +4,9 @@ use {
     memmap2::Mmap,
 };
 
-pub fn get_type<'a, T>(map: &Mmap, offset: usize) -> std::io::Result<(&'a T, usize)> {
+pub fn get_type<T>(map: &Mmap, offset: usize) -> std::io::Result<(&T, usize)> {
     let (data, next) = get_slice(map, offset, std::mem::size_of::<T>())?;
-    let ptr: *const T = data.as_ptr() as *const T;
-    //UNSAFE: The cast is safe because the slice is aligned and fits into the memory
-    //and the lifetime of the &T is tied to self, which holds the underlying memory map
+    let ptr = data.as_ptr() as *const T;
     Ok((unsafe { &*ptr }, next))
 }
 
@@ -32,11 +30,10 @@ pub fn get_slice(map: &Mmap, offset: usize, size: usize) -> std::io::Result<(&[u
     }
     let data = &map[offset..next];
     let next = u64_align!(next);
+    let ptr = data.as_ptr() as *const u8;
 
     Ok((
-        //UNSAFE: This unsafe creates a slice that represents a chunk of self.map memory
-        //The lifetime of this slice is tied to &self, since it points to self.map memory
-        unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u8, size) },
+        unsafe { std::slice::from_raw_parts(ptr, size) },
         next,
     ))
 }
