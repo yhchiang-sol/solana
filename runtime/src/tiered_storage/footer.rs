@@ -2,12 +2,13 @@ use {
     crate::tiered_storage::{file::TieredStorageFile, mmap_utils::get_type},
     memmap2::Mmap,
     serde::{Deserialize, Serialize},
-    solana_sdk::hash::Hash,
+    solana_sdk::{hash::Hash, pubkey::Pubkey},
     std::{mem, path::Path},
 };
 
 pub const FOOTER_FORMAT_VERSION: u64 = 1;
 
+static_assertions::const_assert_eq!(mem::size_of::<TieredStorageFooter>(), 184);
 // The size of the footer struct + the u64 magic number at the end.
 pub const FOOTER_SIZE: i64 = (mem::size_of::<TieredStorageFooter>() + mem::size_of::<u64>()) as i64;
 // The size of the ending part of the footer.  This size should remain unchanged
@@ -146,12 +147,12 @@ pub struct TieredStorageFooter {
     pub account_pubkeys_offset: u64,
     pub owners_offset: u64,
 
-    // the hash of the entire tiered account file
-    pub hash: Hash,
-
     // account range
-    pub min_account_address: Hash,
-    pub max_account_address: Hash,
+    pub min_account_address: Pubkey,
+    pub max_account_address: Pubkey,
+
+    // a hash that represents the tiered account file for consistency check.
+    pub hash: Hash,
 
     // The below fields belong to footer tail.
     // The sum of their sizes should match FOOTER_TAIL_SIZE.
@@ -177,8 +178,8 @@ impl Default for TieredStorageFooter {
             account_pubkeys_offset: 0,
             owners_offset: 0,
             hash: Hash::new_unique(),
-            min_account_address: Hash::default(),
-            max_account_address: Hash::default(),
+            min_account_address: Pubkey::default(),
+            max_account_address: Pubkey::default(),
             footer_size: FOOTER_SIZE as u64,
             format_version: FOOTER_FORMAT_VERSION,
         }
@@ -247,8 +248,7 @@ mod tests {
     use {
         super::*,
         crate::{
-            append_vec::test_utils::get_append_vec_path,
-            tiered_storage::file::TieredStorageFile,
+            append_vec::test_utils::get_append_vec_path, tiered_storage::file::TieredStorageFile,
         },
         memoffset::offset_of,
         solana_sdk::hash::Hash,
@@ -280,8 +280,8 @@ mod tests {
             account_pubkeys_offset: 1069600,
             owners_offset: 1081200,
             hash: Hash::new_unique(),
-            min_account_address: Hash::default(),
-            max_account_address: Hash::new_unique(),
+            min_account_address: Pubkey::default(),
+            max_account_address: Pubkey::new_unique(),
             footer_size: FOOTER_SIZE as u64,
             format_version: FOOTER_FORMAT_VERSION,
         };
@@ -322,9 +322,9 @@ mod tests {
             0x38
         );
         assert_eq!(offset_of!(TieredStorageFooter, owners_offset), 0x40);
-        assert_eq!(offset_of!(TieredStorageFooter, hash), 0x48);
-        assert_eq!(offset_of!(TieredStorageFooter, min_account_address), 0x68);
-        assert_eq!(offset_of!(TieredStorageFooter, max_account_address), 0x88);
+        assert_eq!(offset_of!(TieredStorageFooter, min_account_address), 0x48);
+        assert_eq!(offset_of!(TieredStorageFooter, max_account_address), 0x68);
+        assert_eq!(offset_of!(TieredStorageFooter, hash), 0x88);
         assert_eq!(offset_of!(TieredStorageFooter, footer_size), 0xA8);
         assert_eq!(offset_of!(TieredStorageFooter, format_version), 0xB0);
     }

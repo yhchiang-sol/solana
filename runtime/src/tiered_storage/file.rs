@@ -9,7 +9,6 @@ use std::{
 pub struct TieredStorageFile(pub File);
 
 impl TieredStorageFile {
-
     pub fn new_readonly(file_path: impl AsRef<Path>) -> Self {
         Self(
             OpenOptions::new()
@@ -23,7 +22,7 @@ impl TieredStorageFile {
                         std::env::current_dir(),
                         e
                     );
-                })
+                }),
         )
     }
 
@@ -40,13 +39,13 @@ impl TieredStorageFile {
                         std::env::current_dir(),
                         e,
                     );
-                })
+                }),
         )
     }
 
     pub fn write_type<T>(&self, value: &T) -> Result<usize, std::io::Error> {
         let ptr = value as *const _ as *const u8;
-        let slice = unsafe {std::slice::from_raw_parts(ptr, mem::size_of::<T>())};
+        let slice = unsafe { std::slice::from_raw_parts(ptr, mem::size_of::<T>()) };
         (&self.0).write_all(slice)?;
 
         Ok(std::mem::size_of::<T>())
@@ -54,7 +53,7 @@ impl TieredStorageFile {
 
     pub fn read_type<T>(&self, value: &mut T) -> Result<(), std::io::Error> {
         let ptr = value as *mut _ as *mut u8;
-        let slice = unsafe {std::slice::from_raw_parts_mut(ptr, mem::size_of::<T>())};
+        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, mem::size_of::<T>()) };
         (&self.0).read_exact(slice)?;
 
         Ok(())
