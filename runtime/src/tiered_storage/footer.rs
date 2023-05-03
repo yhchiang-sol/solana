@@ -184,8 +184,8 @@ impl Default for TieredStorageFooter {
 
 impl TieredStorageFooter {
     pub fn new_from_path(path: impl AsRef<Path>) -> std::io::Result<Self> {
-        let storage = TieredStorageFile::new_readonly(path);
-        Self::new_from_footer_block(&storage)
+        let file = TieredStorageFile::new_readonly(path);
+        Self::new_from_footer_block(&file)
     }
 
     pub fn write_footer_block(&self, file: &TieredStorageFile) -> std::io::Result<()> {
