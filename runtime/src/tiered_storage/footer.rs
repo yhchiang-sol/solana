@@ -1,7 +1,6 @@
 use {
     crate::tiered_storage::{file::TieredStorageFile, mmap_utils::get_type},
     memmap2::Mmap,
-    serde::{Deserialize, Serialize},
     solana_sdk::{hash::Hash, pubkey::Pubkey},
     std::{mem, path::Path},
 };
@@ -18,7 +17,7 @@ pub const FOOTER_TAIL_SIZE: i64 = 24;
 // The ending 8 bytes of a valid tiered account storage file.
 pub const FOOTER_MAGIC_NUMBER: u64 = 0x502A2AB5; // SOLALABS -> SOLANA LABS
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct TieredStorageMagicNumber(pub u64);
 
@@ -37,9 +36,7 @@ impl Default for TieredStorageMagicNumber {
     Eq,
     Hash,
     PartialEq,
-    Deserialize,
     num_enum::IntoPrimitive,
-    Serialize,
     num_enum::TryFromPrimitive,
 )]
 pub enum AccountMetaFormat {
@@ -57,9 +54,7 @@ pub enum AccountMetaFormat {
     Eq,
     Hash,
     PartialEq,
-    Deserialize,
     num_enum::IntoPrimitive,
-    Serialize,
     num_enum::TryFromPrimitive,
 )]
 pub enum AccountDataBlockFormat {
@@ -77,9 +72,7 @@ pub enum AccountDataBlockFormat {
     Eq,
     Hash,
     PartialEq,
-    Deserialize,
     num_enum::IntoPrimitive,
-    Serialize,
     num_enum::TryFromPrimitive,
 )]
 pub enum OwnersBlockFormat {
@@ -96,9 +89,7 @@ pub enum OwnersBlockFormat {
     Eq,
     Hash,
     PartialEq,
-    Deserialize,
     num_enum::IntoPrimitive,
-    Serialize,
     num_enum::TryFromPrimitive,
 )]
 pub enum AccountIndexFormat {
@@ -120,7 +111,7 @@ pub struct TieredFileFormat {
     pub data_block_format: AccountDataBlockFormat,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(C)]
 pub struct TieredStorageFooter {
     // formats
