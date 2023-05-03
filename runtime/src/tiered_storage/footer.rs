@@ -7,7 +7,7 @@ use {
 
 pub const FOOTER_FORMAT_VERSION: u64 = 1;
 
-static_assertions::const_assert_eq!(mem::size_of::<TieredStorageFooter>(), 184);
+static_assertions::const_assert_eq!(mem::size_of::<TieredStorageFooter>(), 160);
 // The size of the footer struct + the u64 magic number at the end.
 pub const FOOTER_SIZE: i64 = (mem::size_of::<TieredStorageFooter>() + mem::size_of::<u64>()) as i64;
 // The size of the ending part of the footer.  This size should remain unchanged
@@ -27,7 +27,7 @@ impl Default for TieredStorageMagicNumber {
     }
 }
 
-#[repr(u64)]
+#[repr(u16)]
 #[derive(
     Clone,
     Copy,
@@ -45,7 +45,7 @@ pub enum AccountMetaFormat {
     Cold = 1,
 }
 
-#[repr(u64)]
+#[repr(u16)]
 #[derive(
     Clone,
     Copy,
@@ -63,7 +63,7 @@ pub enum AccountDataBlockFormat {
     Lz4 = 1,
 }
 
-#[repr(u64)]
+#[repr(u16)]
 #[derive(
     Clone,
     Copy,
@@ -80,7 +80,7 @@ pub enum OwnersBlockFormat {
     LocalIndex = 0,
 }
 
-#[repr(u64)]
+#[repr(u16)]
 #[derive(
     Clone,
     Copy,
@@ -290,29 +290,29 @@ mod tests {
     #[test]
     fn test_footer_layout() {
         assert_eq!(offset_of!(TieredStorageFooter, account_meta_format), 0x00);
-        assert_eq!(offset_of!(TieredStorageFooter, owners_block_format), 0x08);
-        assert_eq!(offset_of!(TieredStorageFooter, account_index_format), 0x10);
-        assert_eq!(offset_of!(TieredStorageFooter, data_block_format), 0x18);
-        assert_eq!(offset_of!(TieredStorageFooter, account_entry_count), 0x20);
+        assert_eq!(offset_of!(TieredStorageFooter, owners_block_format), 0x02);
+        assert_eq!(offset_of!(TieredStorageFooter, account_index_format), 0x04);
+        assert_eq!(offset_of!(TieredStorageFooter, data_block_format), 0x06);
+        assert_eq!(offset_of!(TieredStorageFooter, account_entry_count), 0x08);
         assert_eq!(
             offset_of!(TieredStorageFooter, account_meta_entry_size),
-            0x24
+            0x0C
         );
         assert_eq!(
             offset_of!(TieredStorageFooter, account_data_block_size),
-            0x28
+            0x10
         );
-        assert_eq!(offset_of!(TieredStorageFooter, owner_count), 0x30);
-        assert_eq!(offset_of!(TieredStorageFooter, owner_entry_size), 0x34);
+        assert_eq!(offset_of!(TieredStorageFooter, owner_count), 0x18);
+        assert_eq!(offset_of!(TieredStorageFooter, owner_entry_size), 0x1C);
         assert_eq!(
             offset_of!(TieredStorageFooter, account_pubkeys_offset),
-            0x38
+            0x20
         );
-        assert_eq!(offset_of!(TieredStorageFooter, owners_offset), 0x40);
-        assert_eq!(offset_of!(TieredStorageFooter, min_account_address), 0x48);
-        assert_eq!(offset_of!(TieredStorageFooter, max_account_address), 0x68);
-        assert_eq!(offset_of!(TieredStorageFooter, hash), 0x88);
-        assert_eq!(offset_of!(TieredStorageFooter, footer_size), 0xA8);
-        assert_eq!(offset_of!(TieredStorageFooter, format_version), 0xB0);
+        assert_eq!(offset_of!(TieredStorageFooter, owners_offset), 0x28);
+        assert_eq!(offset_of!(TieredStorageFooter, min_account_address), 0x30);
+        assert_eq!(offset_of!(TieredStorageFooter, max_account_address), 0x50);
+        assert_eq!(offset_of!(TieredStorageFooter, hash), 0x70);
+        assert_eq!(offset_of!(TieredStorageFooter, footer_size), 0x90);
+        assert_eq!(offset_of!(TieredStorageFooter, format_version), 0x98);
     }
 }
