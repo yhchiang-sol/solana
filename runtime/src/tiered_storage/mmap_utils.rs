@@ -11,7 +11,7 @@ pub fn get_type<T>(map: &Mmap, offset: usize) -> std::io::Result<(&T, usize)> {
 }
 
 /// Get a reference to the data at `offset` of `size` bytes if that slice
-/// doesn't overrun the internal buffer. Otherwise return None.
+/// doesn't overrun the internal buffer. Otherwise return an Error.
 /// Also return the offset of the first byte after the requested data that
 /// falls on a 64-byte boundary.
 pub fn get_slice(map: &Mmap, offset: usize, size: usize) -> std::io::Result<(&[u8], usize)> {

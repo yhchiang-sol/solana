@@ -42,7 +42,6 @@ impl Default for TieredStorageMagicNumber {
     Serialize,
     num_enum::TryFromPrimitive,
 )]
-#[serde(into = "u64", try_from = "u64")]
 pub enum AccountMetaFormat {
     #[default]
     Hot = 0,
@@ -63,7 +62,6 @@ pub enum AccountMetaFormat {
     Serialize,
     num_enum::TryFromPrimitive,
 )]
-#[serde(into = "u64", try_from = "u64")]
 pub enum AccountDataBlockFormat {
     #[default]
     AlignedRaw = 0,
@@ -84,7 +82,6 @@ pub enum AccountDataBlockFormat {
     Serialize,
     num_enum::TryFromPrimitive,
 )]
-#[serde(into = "u64", try_from = "u64")]
 pub enum OwnersBlockFormat {
     #[default]
     LocalIndex = 0,
@@ -104,7 +101,6 @@ pub enum OwnersBlockFormat {
     Serialize,
     num_enum::TryFromPrimitive,
 )]
-#[serde(into = "u64", try_from = "u64")]
 pub enum AccountIndexFormat {
     // This format does not support any fast lookup.
     // Any query from account hash to account meta requires linear search.
@@ -134,7 +130,7 @@ pub struct TieredStorageFooter {
     pub data_block_format: AccountDataBlockFormat,
 
     // account-related
-    pub account_meta_count: u32,
+    pub account_entry_count: u32,
     pub account_meta_entry_size: u32,
     pub account_data_block_size: u64,
 
@@ -170,7 +166,7 @@ impl Default for TieredStorageFooter {
             owners_block_format: OwnersBlockFormat::default(),
             account_index_format: AccountIndexFormat::default(),
             data_block_format: AccountDataBlockFormat::default(),
-            account_meta_count: 0,
+            account_entry_count: 0,
             account_meta_entry_size: 0,
             account_data_block_size: 0,
             owner_count: 0,
@@ -225,9 +221,9 @@ impl TieredStorageFooter {
 
     pub fn new_from_mmap(map: &Mmap) -> std::io::Result<&TieredStorageFooter> {
         let offset = map.len().saturating_sub(FOOTER_TAIL_SIZE as usize);
-        let (footer_size, offset): (&u64, _) = get_type(map, offset)?;
-        let (_footer_version, offset): (&u64, _) = get_type(map, offset)?;
-        let (magic_number, _offset): (&TieredStorageMagicNumber, _) = get_type(map, offset)?;
+        let (footer_size, offset) = get_type::<u64>(map, offset)?;
+        let (_footer_version, offset) = get_type::<u64>(map, offset)?;
+        let (magic_number, _offset) = get_type::<TieredStorageMagicNumber>(map, offset)?;
 
         if *magic_number != TieredStorageMagicNumber::default() {
             return Err(std::io::Error::new(
@@ -272,7 +268,7 @@ mod tests {
             owners_block_format: OwnersBlockFormat::LocalIndex,
             account_index_format: AccountIndexFormat::Linear,
             data_block_format: AccountDataBlockFormat::AlignedRaw,
-            account_meta_count: 300,
+            account_entry_count: 300,
             account_meta_entry_size: 24,
             account_data_block_size: 4096,
             owner_count: 250,
@@ -306,7 +302,7 @@ mod tests {
         assert_eq!(offset_of!(TieredStorageFooter, owners_block_format), 0x08);
         assert_eq!(offset_of!(TieredStorageFooter, account_index_format), 0x10);
         assert_eq!(offset_of!(TieredStorageFooter, data_block_format), 0x18);
-        assert_eq!(offset_of!(TieredStorageFooter, account_meta_count), 0x20);
+        assert_eq!(offset_of!(TieredStorageFooter, account_entry_count), 0x20);
         assert_eq!(
             offset_of!(TieredStorageFooter, account_meta_entry_size),
             0x24

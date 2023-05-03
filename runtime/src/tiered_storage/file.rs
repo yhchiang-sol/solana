@@ -17,9 +17,8 @@ impl TieredStorageFile {
                 .open(&file_path)
                 .unwrap_or_else(|e| {
                     panic!(
-                        "Unable to open {:?} as a read-only TieredStorageFile at {:?}: {:?}",
+                        "[TieredStorageError] Unable to open {:?} as read-only: {:?}",
                         file_path.as_ref().display(),
-                        std::env::current_dir(),
                         e
                     );
                 }),
@@ -34,9 +33,8 @@ impl TieredStorageFile {
                 .open(&file_path)
                 .unwrap_or_else(|e| {
                     panic!(
-                        "Unable to create {:?} as a writable TieredStorageFile at {:?}: {:?}",
+                        "[TieredStorageError] Unable to create {:?} as writable: {:?}",
                         file_path.as_ref().display(),
-                        std::env::current_dir(),
                         e,
                     );
                 }),
