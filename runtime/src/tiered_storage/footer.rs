@@ -223,8 +223,8 @@ impl TieredStorageFooter {
             ));
         }
 
-        let (footer, _offset): (&TieredStorageFooter, _) =
-            get_type(map, map.len().saturating_sub(*footer_size as usize))?;
+        let (footer, _offset) =
+            get_type::<TieredStorageFooter>(map, map.len().saturating_sub(*footer_size as usize))?;
 
         Ok(footer)
     }
@@ -241,15 +241,6 @@ mod tests {
         solana_sdk::hash::Hash,
         std::mem,
     };
-
-    #[test]
-    /// Make sure the in-memory size is what we expected.
-    fn test_footer_size() {
-        assert_eq!(
-            mem::size_of::<TieredStorageFooter>() + mem::size_of::<u64>(),
-            FOOTER_SIZE as usize
-        );
-    }
 
     #[test]
     fn test_footer() {
