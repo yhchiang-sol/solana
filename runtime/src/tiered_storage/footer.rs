@@ -7,14 +7,16 @@ use {
 
 pub const FOOTER_FORMAT_VERSION: u64 = 1;
 
+/// The size of the footer struct + the magic number at the end.
+pub const FOOTER_SIZE: usize =
+    mem::size_of::<TieredStorageFooter>() + mem::size_of::<TieredStorageMagicNumber>();
 static_assertions::const_assert_eq!(mem::size_of::<TieredStorageFooter>(), 160);
-// The size of the footer struct + the u64 magic number at the end.
-pub const FOOTER_SIZE: i64 = (mem::size_of::<TieredStorageFooter>() + mem::size_of::<u64>()) as i64;
-// The size of the ending part of the footer.  This size should remain unchanged
-// even when the footer's format changes.
-pub const FOOTER_TAIL_SIZE: i64 = 24;
 
-// The ending 8 bytes of a valid tiered account storage file.
+/// The size of the ending part of the footer.  This size should remain unchanged
+/// even when the footer's format changes.
+pub const FOOTER_TAIL_SIZE: usize = 24;
+
+/// The ending 8 bytes of a valid tiered account storage file.
 pub const FOOTER_MAGIC_NUMBER: u64 = 0x502A2AB5; // SOLALABS -> SOLANA LABS
 
 #[derive(Debug, PartialEq, Eq)]
@@ -191,7 +193,7 @@ impl TieredStorageFooter {
         let mut footer_version: u64 = 0;
         let mut magic_number = TieredStorageMagicNumber(0);
 
-        file.seek_from_end(-FOOTER_TAIL_SIZE)?;
+        file.seek_from_end(-(FOOTER_TAIL_SIZE as i64))?;
         file.read_type(&mut footer_size)?;
         file.read_type(&mut footer_version)?;
         file.read_type(&mut magic_number)?;
@@ -211,7 +213,7 @@ impl TieredStorageFooter {
     }
 
     pub fn new_from_mmap(map: &Mmap) -> std::io::Result<&TieredStorageFooter> {
-        let offset = map.len().saturating_sub(FOOTER_TAIL_SIZE as usize);
+        let offset = map.len().saturating_sub(FOOTER_TAIL_SIZE);
         let (footer_size, offset) = get_type::<u64>(map, offset)?;
         let (_footer_version, offset) = get_type::<u64>(map, offset)?;
         let (magic_number, _offset) = get_type::<TieredStorageMagicNumber>(map, offset)?;
@@ -247,7 +249,7 @@ mod tests {
     fn test_footer_size() {
         assert_eq!(
             mem::size_of::<TieredStorageFooter>() + mem::size_of::<u64>(),
-            FOOTER_SIZE as usize
+            FOOTER_SIZE,
         );
     }
 
