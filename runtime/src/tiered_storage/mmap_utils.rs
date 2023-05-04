@@ -7,6 +7,7 @@ use {
 pub fn get_type<T>(map: &Mmap, offset: usize) -> std::io::Result<(&T, usize)> {
     let (data, next) = get_slice(map, offset, std::mem::size_of::<T>())?;
     let ptr = data.as_ptr() as *const T;
+    debug_assert!(ptr as usize % std::mem::align_of::<T>() == 0);
     Ok((unsafe { &*ptr }, next))
 }
 
