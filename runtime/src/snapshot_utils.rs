@@ -1814,11 +1814,11 @@ pub fn bank_from_latest_snapshot_dir(
 /// and hash
 fn verify_bank_against_expected_slot_hash(
     bank: &Bank,
-    expected_slot: Slot,
-    expected_hash: SnapshotHash,
+    _expected_slot: Slot,
+    _expected_hash: SnapshotHash,
 ) -> Result<()> {
-    let bank_slot = bank.slot();
-    let bank_hash = bank.get_snapshot_hash();
+    let _bank_slot = bank.slot();
+    let _bank_hash = bank.get_snapshot_hash();
 
     /*
     if bank_slot != expected_slot || bank_hash != expected_hash {

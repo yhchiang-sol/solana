@@ -7279,7 +7279,7 @@ impl AccountsDb {
                         assert!(!file_name.is_empty());
                         (!r.is_empty() && r.iter().any(|b| !b.is_empty())).then(|| {
                             // error if we can't write this
-                            cache_hash_data.save(&file_name, r).unwrap();
+                            cache_hash_data.save(&file_name, &r).unwrap();
                             cache_hash_data.load_map(&file_name).unwrap()
                         })
                     })

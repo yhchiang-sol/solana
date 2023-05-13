@@ -285,10 +285,10 @@ impl CacheHashData {
     pub fn save(
         &self,
         file_name: impl AsRef<Path>,
-        data: Vec<Vec<EntryType>>,
+        data: &Vec<Vec<EntryType>>,
     ) -> Result<(), std::io::Error> {
         let mut stats = CacheHashDataStats::default();
-        let result = self.save_internal(file_name, data, &mut stats);
+        let result = self.save_internal(file_name, &data, &mut stats);
         self.stats.lock().unwrap().accumulate(&stats);
         result
     }
@@ -296,7 +296,7 @@ impl CacheHashData {
     fn save_internal(
         &self,
         file_name: impl AsRef<Path>,
-        data: Vec<Vec<EntryType>>,
+        data: &Vec<Vec<EntryType>>,
         stats: &mut CacheHashDataStats,
     ) -> Result<(), std::io::Error> {
         let mut m = Measure::start("save");
@@ -333,7 +333,7 @@ impl CacheHashData {
             x.into_iter().for_each(|item| {
                 let d = cache_file.get_mut(i as u64);
                 i += 1;
-                *d = item;
+                *d = *item;
             })
         });
         assert_eq!(i, entries);
