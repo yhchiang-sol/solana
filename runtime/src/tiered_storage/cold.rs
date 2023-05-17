@@ -5,6 +5,7 @@ use {
         append_vec::MatchAccountOwnerError,
         tiered_storage::{
             data_block::AccountBlock,
+            error::TieredStorageResult,
             file::TieredStorageFile,
             footer::{
                 AccountBlockFormat, AccountIndexFormat, AccountMetaFormat, OwnersBlockFormat,
@@ -41,7 +42,7 @@ pub struct ColdStorageReader {
 }
 
 impl ColdStorageReader {
-    pub fn new_from_file(file_path: impl AsRef<Path>) -> std::io::Result<ColdStorageReader> {
+    pub fn new_from_file(file_path: impl AsRef<Path>) -> TieredStorageResult<ColdStorageReader> {
         let storage = TieredStorageFile::new_writable(file_path.as_ref());
         let footer = ColdReaderBuilder::read_footer_block(&storage)?;
 
@@ -120,14 +121,14 @@ impl ColdStorageReader {
 pub(crate) struct ColdReaderBuilder {}
 
 impl ColdReaderBuilder {
-    fn read_footer_block(storage: &TieredStorageFile) -> std::io::Result<TieredStorageFooter> {
+    fn read_footer_block(storage: &TieredStorageFile) -> TieredStorageResult<TieredStorageFooter> {
         TieredStorageFooter::new_from_footer_block(&storage)
     }
 
     fn read_account_metas_block(
         storage: &TieredStorageFile,
         footer: &TieredStorageFooter,
-    ) -> std::io::Result<Vec<ColdAccountMeta>> {
+    ) -> TieredStorageResult<Vec<ColdAccountMeta>> {
         let mut metas: Vec<ColdAccountMeta> =
             Vec::with_capacity(footer.account_entry_count as usize);
 
@@ -143,7 +144,7 @@ impl ColdReaderBuilder {
     fn read_account_addresses_block(
         storage: &TieredStorageFile,
         footer: &TieredStorageFooter,
-    ) -> std::io::Result<Vec<Pubkey>> {
+    ) -> TieredStorageResult<Vec<Pubkey>> {
         Self::read_pubkeys_block(
             storage,
             footer.account_index_offset,
@@ -154,7 +155,7 @@ impl ColdReaderBuilder {
     fn read_owners_block(
         storage: &TieredStorageFile,
         footer: &TieredStorageFooter,
-    ) -> std::io::Result<Vec<Pubkey>> {
+    ) -> TieredStorageResult<Vec<Pubkey>> {
         Self::read_pubkeys_block(storage, footer.owners_offset, footer.owner_count)
     }
 
@@ -162,7 +163,7 @@ impl ColdReaderBuilder {
         storage: &TieredStorageFile,
         offset: u64,
         count: u32,
-    ) -> std::io::Result<Vec<Pubkey>> {
+    ) -> TieredStorageResult<Vec<Pubkey>> {
         let mut addresses: Vec<Pubkey> = Vec::with_capacity(count as usize);
         (&storage).seek(offset)?;
         for _ in 0..count {
@@ -178,7 +179,7 @@ impl ColdReaderBuilder {
         storage: &TieredStorageFile,
         footer: &TieredStorageFooter,
         metas: &Vec<ColdAccountMeta>,
-    ) -> std::io::Result<HashMap<u64, Vec<u8>>> {
+    ) -> TieredStorageResult<HashMap<u64, Vec<u8>>> {
         let count = footer.account_entry_count as usize;
         let mut data_blocks = HashMap::<u64, Vec<u8>>::new();
         for i in 0..count {
@@ -193,7 +194,7 @@ impl ColdReaderBuilder {
         footer: &TieredStorageFooter,
         metas: &Vec<ColdAccountMeta>,
         index: usize,
-    ) -> std::io::Result<()> {
+    ) -> TieredStorageResult<()> {
         let block_offset = &metas[index].block_offset();
         if !data_blocks.contains_key(&block_offset) {
             let data_block = Self::read_data_block(storage, footer, metas, index).unwrap();
@@ -208,7 +209,7 @@ impl ColdReaderBuilder {
         footer: &TieredStorageFooter,
         metas: &Vec<ColdAccountMeta>,
         index: usize,
-    ) -> std::io::Result<Vec<u8>> {
+    ) -> TieredStorageResult<Vec<u8>> {
         let compressed_block_size = get_compressed_block_size(footer, metas, index) as usize;
 
         (&storage).seek(metas[index].block_offset())?;
@@ -396,8 +397,8 @@ impl TieredAccountMeta for ColdAccountMeta {
         self.uncompressed_data_size == ACCOUNT_DATA_ENTIRE_BLOCK && self.intra_block_offset == 0
     }
 
-    fn write_account_meta_entry(&self, ads_file: &TieredStorageFile) -> std::io::Result<usize> {
-        ads_file.write_type(self)?;
+    fn write_account_meta_entry(&self, file: &TieredStorageFile) -> std::io::Result<usize> {
+        file.write_type(self)?;
 
         Ok(std::mem::size_of::<ColdAccountMeta>())
     }
@@ -424,9 +425,9 @@ impl TieredAccountMeta for ColdAccountMeta {
 }
 
 impl ColdAccountMeta {
-    fn new_from_file(ads_file: &TieredStorageFile) -> std::io::Result<Self> {
+    fn new_from_file(file: &TieredStorageFile) -> TieredStorageResult<Self> {
         let mut entry = ColdAccountMeta::new();
-        ads_file.read_type(&mut entry)?;
+        file.read_type(&mut entry)?;
 
         Ok(entry)
     }
@@ -509,14 +510,14 @@ pub mod tests {
             .with_optional_fields(&optional_fields);
 
         {
-            let mut ads_file = TieredStorageFile::new_writable(&path.path);
+            let mut file = TieredStorageFile::new_writable(&path.path);
             expected_entry
-                .write_account_meta_entry(&mut ads_file)
+                .write_account_meta_entry(&mut file)
                 .unwrap();
         }
 
-        let mut ads_file = TieredStorageFile::new_readonly(&path.path);
-        let entry = ColdAccountMeta::new_from_file(&mut ads_file).unwrap();
+        let mut file = TieredStorageFile::new_readonly(&path.path);
+        let entry = ColdAccountMeta::new_from_file(&mut file).unwrap();
 
         assert_eq!(expected_entry, entry);
         assert_eq!(entry.flags_get(AccountMetaFlags::EXECUTABLE), true);

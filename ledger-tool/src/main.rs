@@ -44,18 +44,9 @@ use {
     },
     solana_measure::{measure, measure::Measure},
     solana_runtime::{
-        account_storage::meta::StoredAccountMeta,
         accounts::Accounts,
-        accounts_background_service::{
-            AbsRequestHandlers, AbsRequestSender, AccountsBackgroundService,
-            PrunedBanksRequestHandler, SnapshotRequestHandler,
-        },
-        accounts_db::{
-            AccountsDb, AccountsDbConfig, CalcAccountsHashDataSource, FillerAccountsConfig,
-        },
-        accounts_index::{AccountsIndexConfig, IndexLimitMb, ScanConfig},
-        accounts_update_notifier_interface::AccountsUpdateNotifier,
-        append_vec::AppendVec,
+        accounts_db::CalcAccountsHashDataSource,
+        accounts_index::ScanConfig,
         bank::{Bank, RewardCalculationEvent, TotalAccountsStats},
         bank_forks::BankForks,
         cost_model::CostModel,
@@ -68,7 +59,6 @@ use {
             self, ArchiveFormat, SnapshotVersion, DEFAULT_ARCHIVE_COMPRESSION,
             SUPPORTED_ARCHIVE_COMPRESSION,
         },
-        tiered_storage::{hot::HOT_FORMAT, TieredStorage},
     },
     solana_sdk::{
         account::{AccountSharedData, ReadableAccount, WritableAccount},
@@ -2545,6 +2535,7 @@ fn main() {
                 exit_signal.store(true, Ordering::Relaxed);
                 system_monitor_service.join().unwrap();
             }
+            /*
             ("graph", Some(arg_matches)) => {
                 let output_file = value_t_or_exit!(arg_matches, "graph_filename", String);
                 let graph_config = GraphConfig {
@@ -2602,6 +2593,7 @@ fn main() {
                     }
                 }
             }
+            */
             ("create-snapshot", Some(arg_matches)) => {
                 let is_incremental = arg_matches.is_present("incremental");
                 let is_minimized = arg_matches.is_present("minimized");
@@ -4070,8 +4062,6 @@ fn main() {
             }
             ("program", Some(arg_matches)) => {
                 program(&ledger_path, arg_matches);
-            ("run", Some(arg_matches)) => {
-                run(&ledger_path, arg_matches);
             }
             ("", _) => {
                 eprintln!("{}", matches.usage());

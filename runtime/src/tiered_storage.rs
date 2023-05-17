@@ -1,9 +1,6 @@
-<<<<<<< HEAD
-pub mod error;
-=======
 pub mod cold;
 pub mod data_block;
->>>>>>> f0f88d28d7 (Introduce AccountsDataStorage)
+pub mod error;
 pub mod file;
 pub mod footer;
 pub mod hot;
@@ -18,10 +15,11 @@ use {
         account_storage::meta::{
             StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo, StoredAccountMeta,
         },
-        append_vec::{AppendVec, MatchAccountOwnerError},
+        append_vec::MatchAccountOwnerError,
         storable_accounts::StorableAccounts,
     },
     data_block::AccountBlockWriter,
+    error::TieredStorageResult,
     footer::TieredFileFormat,
     log::log_enabled,
     once_cell::sync::OnceCell,
@@ -81,7 +79,7 @@ impl TieredStorage {
         }
     }
 
-    pub fn new_from_file<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<(Self, usize)> {
+    pub fn new_from_file<P: AsRef<std::path::Path>>(path: P) -> TieredStorageResult<(Self, usize)> {
         let reader = TieredStorageReader::new_from_path(path.as_ref())?;
         let count = reader.num_accounts();
         let reader_cell = OnceCell::<TieredStorageReader>::new();
@@ -197,27 +195,6 @@ impl TieredStorage {
 
     pub fn is_read_only(&self) -> bool {
         self.reader.get().is_some()
-    }
-
-    pub fn write_from_append_vec(&self, append_vec: &AppendVec) -> std::io::Result<()> {
-        let writer = TieredStorageWriter::new(&self.path, self.format.unwrap());
-        let result = writer.write_from_append_vec(&append_vec);
-        if result.is_ok() {
-            if self
-                .reader
-                .set(TieredStorageReader::new_from_path(&self.path).unwrap())
-                .is_ok()
-            {
-                return result;
-            } else {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "TieredStorageError::Reader failure",
-                ));
-            }
-        }
-
-        result
     }
 
     ///////////////////////////////////////////////////////////////////////////////
@@ -411,30 +388,6 @@ pub mod tests {
             &test_accounts,
             &ads_path,
             &hashes_map,
-            format,
-        );
-    }
-
-    fn write_from_append_vec_test_helper(
-        path_prefix: &str,
-        account_data_sizes: &[usize],
-        format: &'static TieredFileFormat,
-    ) {
-        let account_count = account_data_sizes.len();
-        let (test_accounts, av) =
-            create_test_append_vec(&(path_prefix.to_owned() + "_av"), account_data_sizes);
-
-        let ads_path = get_append_vec_path(&(path_prefix.to_owned() + "_ads"));
-        {
-            let ads = TieredStorage::new_for_test(&ads_path.path, format);
-            ads.write_from_append_vec(&av).unwrap();
-        }
-
-        verify_account_data_storage(
-            account_count,
-            &test_accounts,
-            &ads_path,
-            &HashMap::new(),
             format,
         );
     }

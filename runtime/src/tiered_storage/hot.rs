@@ -6,6 +6,7 @@ use {
         append_vec::MatchAccountOwnerError,
         tiered_storage::{
             data_block::AccountBlock,
+            error::TieredStorageResult,
             file::TieredStorageFile,
             footer::{
                 AccountBlockFormat, AccountIndexFormat, AccountMetaFormat, OwnersBlockFormat,
@@ -244,7 +245,7 @@ pub struct HotStorageReader {
 }
 
 impl HotStorageReader {
-    pub fn new_from_path<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+    pub fn new_from_path<P: AsRef<Path>>(path: P) -> TieredStorageResult<Self> {
         let file = OpenOptions::new()
             .read(true)
             .create(false)
