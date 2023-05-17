@@ -8,7 +8,7 @@ use {
 
 // This is in-memory struct is only used in the writer.
 // The actual storage format of the tiered account index is different.
-pub struct AccountIndexWriterEntry2<'a> {
+pub struct AccountIndexWriterEntry<'a> {
     pub pubkey: &'a Pubkey,
     pub block_offset: u64,
     pub intra_block_offset: u64,
@@ -17,9 +17,9 @@ pub struct AccountIndexWriterEntry2<'a> {
 pub struct HotAccountIndexer {}
 
 impl HotAccountIndexer {
-    pub fn write_index_block2(
+    pub fn write_index_block(
         file: &TieredStorageFile,
-        index_entries: &Vec<AccountIndexWriterEntry2>,
+        index_entries: &Vec<AccountIndexWriterEntry>,
     ) -> std::io::Result<u64> {
         let mut cursor: u64 = 0;
         for index_entry in index_entries {
