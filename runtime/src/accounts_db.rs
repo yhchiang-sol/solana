@@ -7645,8 +7645,8 @@ impl AccountsDb {
 
         let slot = storages.max_slot_inclusive();
         let use_bg_thread_pool = config.use_bg_thread_pool;
-        let scan_and_hash = || {
-            let cache_hash_data = Self::get_cache_hash_data(accounts_hash_cache_path, config, slot);
+        let mut scan_and_hash = || {
+            let cache_hash_data = Self::get_cache_hash_data(accounts_hash_cache_path.clone(), config, slot);
 
             let bounds = Range {
                 start: 0,
@@ -7660,6 +7660,7 @@ impl AccountsDb {
                     None
                 },
                 zero_lamport_accounts: flavor.zero_lamport_accounts(),
+                temp_file_path: accounts_hash_cache_path.clone(),
             };
             error!("jwash: scan_snapshot_stores_with_cache");
 
