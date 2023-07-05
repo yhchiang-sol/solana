@@ -16,6 +16,13 @@ pub struct StoredAccountInfo {
     pub size: usize,
 }
 
+lazy_static! {
+    pub static ref DEFAULT_ACCOUNT_HASH: Hash = Hash::default();
+}
+
+pub const DEFAULT_WRITE_VERSION: StoredMetaWriteVersion = 0;
+pub const DEFAULT_RENT_EPOCH: Epoch = Epoch::MAX;
+
 /// Goal is to eliminate copies and data reshaping given various code paths that store accounts.
 /// This struct contains what is needed to store accounts to a storage
 /// 1. account & pubkey (StorableAccounts)
@@ -121,8 +128,7 @@ impl<'a> StoredAccountMeta<'a> {
         match self {
             Self::AppendVec(av) => av.hash(),
             // Self::Cold(cs) => cs.hash(),
-            // TODO(yhchiang): replaced by unwrap_or(DEFAULT_ACCOUNT_HASH) with lazy init
-            Self::Hot(hs) => hs.hash().unwrap(),
+            Self::Hot(hs) => hs.hash().unwrap_or(&DEFAULT_ACCOUNT_HASH),
         }
     }
 
@@ -162,7 +168,7 @@ impl<'a> StoredAccountMeta<'a> {
         match self {
             Self::AppendVec(av) => av.write_version(),
             // Self::Cold(cs) => cs.write_version(),
-            Self::Hot(hs) => hs.write_version().unwrap_or(0),
+            Self::Hot(hs) => hs.write_version().unwrap_or(DEFAULT_WRITE_VERSION),
         }
     }
 

@@ -15,8 +15,8 @@ use {
                 get_compressed_block_size, AccountMetaFlags, TieredAccountMeta,
                 ACCOUNT_DATA_ENTIRE_BLOCK, DEFAULT_ACCOUNT_HASH,
             },
-            reader::TieredReadableAccountMeta,
-            TieredStorageResult, ACCOUNT_DATA_BLOCK_SIZE,
+            readable::TieredReadableAccount,
+            TieredStorageResult,
         },
     },
     log::*,
@@ -289,6 +289,10 @@ impl TieredAccountMeta for ColdAccountMeta {
         self
     }
 
+    fn support_shared_byte_block() -> bool {
+        true
+    }
+
     fn lamports(&self) -> u64 {
         self.lamports
     }
@@ -413,9 +417,9 @@ impl TieredAccountMeta for ColdAccountMeta {
 }
 
 impl ColdAccountMeta {
-    fn new_from_file(ads_file: &TieredStorageFile) -> TieredStorageResult<Self> {
+    fn new_from_file(file: &TieredStorageFile) -> TieredStorageResult<Self> {
         let mut entry = ColdAccountMeta::new();
-        ads_file.read_type(&mut entry)?;
+        file.read_type(&mut entry)?;
 
         Ok(entry)
     }
@@ -484,7 +488,7 @@ pub mod tests {
         };
 
         let mut expected_entry = ColdAccountMeta::new();
-        let mut flags = AccountMetaFlags::from(&optional_fields);
+        let mut flags = AccountMetaFlags::new_from(&optional_fields);
         flags.set_executable(true);
         expected_entry
             .with_lamports(TEST_LAMPORT)
@@ -499,8 +503,8 @@ pub mod tests {
             ads_file.write_type(&expected_entry);
         }
 
-        let mut ads_file = TieredStorageFile::new_readonly(&path.path);
-        let entry = ColdAccountMeta::new_from_file(&mut ads_file).unwrap();
+        let mut file = TieredStorageFile::new_readonly(&path.path);
+        let entry = ColdAccountMeta::new_from_file(&mut file).unwrap();
 
         assert_eq!(expected_entry, entry);
         assert!(entry.flags.executable());

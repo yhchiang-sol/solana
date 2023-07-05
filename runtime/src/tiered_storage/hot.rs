@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 //! The account meta and related structs for hot accounts.
 
+#![allow(unused_imports)]
 use {
     crate::{
         account_storage::meta::{StoredAccountMeta, StoredMetaWriteVersion},

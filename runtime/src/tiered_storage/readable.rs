@@ -51,7 +51,10 @@ impl<'a, M: TieredAccountMeta> TieredReadableAccount<'a, M> {
     }
 
     pub fn stored_size(&self) -> usize {
-        unimplemented!();
+        std::mem::size_of::<M>() +
+            std::mem::size_of::<Pubkey>() +
+            std::mem::size_of::<Pubkey>() +
+            self.account_block.len()
     }
 
     /// Returns the data associated to this account.

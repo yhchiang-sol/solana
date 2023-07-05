@@ -2647,6 +2647,7 @@ fn main() {
                 exit_signal.store(true, Ordering::Relaxed);
                 system_monitor_service.join().unwrap();
             }
+            /*
             ("graph", Some(arg_matches)) => {
                 let output_file = value_t_or_exit!(arg_matches, "graph_filename", String);
                 let graph_config = GraphConfig {
@@ -2709,6 +2710,7 @@ fn main() {
                     }
                 }
             }
+            */
             ("create-snapshot", Some(arg_matches)) => {
                 let is_incremental = arg_matches.is_present("incremental");
                 let is_minimized = arg_matches.is_present("minimized");

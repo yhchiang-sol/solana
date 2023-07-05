@@ -15,7 +15,7 @@ use {
         account_storage::meta::{
             StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo, StoredAccountMeta,
         },
-        append_vec::{AppendVec, MatchAccountOwnerError},
+        append_vec::MatchAccountOwnerError,
         storable_accounts::StorableAccounts,
     },
     error::TieredStorageError,
@@ -198,6 +198,7 @@ impl TieredStorage {
         self.reader.get().is_some()
     }
 
+    /*
     pub fn write_from_append_vec(&self, append_vec: &AppendVec) -> TieredStorageResult<()> {
         let writer = TieredStorageWriter::new(&self.path, self.format.unwrap());
         writer.write_from_append_vec(&append_vec)?;
@@ -205,7 +206,7 @@ impl TieredStorage {
         self.reader
             .set(TieredStorageReader::new_from_path(&self.path)?)
             .map_err(|_| TieredStorageError::ReaderInitializationFailure())
-    }
+    }*/
 
     ///////////////////////////////////////////////////////////////////////////////
 

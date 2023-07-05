@@ -3,11 +3,10 @@
 use {
     crate::{
         account_storage::meta::{
-            AccountMeta, StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo,
-            StoredAccountMeta, StoredMeta,
+            StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo, StoredMetaWriteVersion,
+            DEFAULT_ACCOUNT_HASH, DEFAULT_RENT_EPOCH, DEFAULT_WRITE_VERSION,
         },
         accounts_file::ALIGN_BOUNDARY_OFFSET,
-        append_vec::{AppendVec, AppendVecStoredAccountMeta},
         storable_accounts::StorableAccounts,
         tiered_storage::{
             byte_block::ByteBlockWriter,
@@ -20,12 +19,26 @@ use {
         },
     },
     log::*,
-    solana_sdk::{account::ReadableAccount, hash::Hash, pubkey::Pubkey},
+    solana_sdk::{
+        account::{Account, ReadableAccount},
+        hash::Hash,
+        pubkey::Pubkey,
+        stake_history::Epoch,
+    },
     std::{borrow::Borrow, collections::HashMap, fs::remove_file, mem, path::Path},
 };
 
 pub const ACCOUNT_DATA_BLOCK_SIZE: usize = 4096;
 pub const ACCOUNTS_DATA_STORAGE_FORMAT_VERSION: u64 = 1;
+lazy_static! {
+    pub static ref ACCOUNT_DEFAULT: Account = Account {
+        lamports: 0,
+        data: Vec::new(),
+        owner: Pubkey::from([0u8; 32]),
+        executable: false,
+        rent_epoch: u64::MAX,
+    };
+}
 
 lazy_static! {
     pub static ref HASH_DEFAULT: Hash = Hash::default();
@@ -87,7 +100,7 @@ impl TieredStorageWriter {
         skip: usize,
     ) -> Option<Vec<StoredAccountInfo>> {
         let mut cursor = 0;
-        let mut account_pubkeys: Vec<Pubkey> = vec![];
+        let mut account_pubkeys: Vec<&Pubkey> = vec![];
         let mut owners_table = AccountOwnerTable::new();
         let mut dummy_hash: Hash = Hash::new_unique();
 
@@ -96,58 +109,65 @@ impl TieredStorageWriter {
         footer.account_meta_entry_size = std::mem::size_of::<W>() as u32;
 
         let mut buffered_account_metas = Vec::<W>::new();
-        let mut buffered_account_pubkeys: Vec<Pubkey> = vec![];
+        let mut buffered_account_pubkeys: Vec<&Pubkey> = vec![];
 
         let len = accounts.accounts.len();
-        let mut input_pubkey_map: HashMap<Pubkey, usize> = HashMap::with_capacity(len);
+        let mut input_pubkey_map: HashMap<&Pubkey, usize> = HashMap::with_capacity(len);
         let mut account_index_entries = Vec::<AccountIndexWriterEntry>::new();
 
+        let default_data = [0u8; 0];
+        let default_pubkey = Pubkey::default();
+
         for i in skip..len {
-            // TODO(yhchiang): here we don't need to convert it to
-            // StoredAccountMeta::AppendVec
-            let (account, pubkey, hash, write_version_obsolete) = accounts.get(i);
-            input_pubkey_map.insert(*pubkey, i);
-            let account_meta = account
-                .map(|account| AccountMeta {
-                    lamports: account.lamports(),
-                    owner: *account.owner(),
-                    rent_epoch: account.rent_epoch(),
-                    executable: account.executable(),
-                })
-                .unwrap_or_default();
-
-            let stored_meta = StoredMeta {
-                pubkey: *pubkey,
-                data_len: account
-                    .map(|account| account.data().len())
-                    .unwrap_or_default() as u64,
-                write_version_obsolete,
-            };
-
-            let stored_account_meta = StoredAccountMeta::AppendVec(AppendVecStoredAccountMeta {
-                meta: &stored_meta,
-                account_meta: &account_meta,
-                data: account.map(|account| account.data()).unwrap_or_default(),
-                offset: 0,
-                stored_size: 0,
-                hash: hash,
-            });
-
-            data_block_writer = self
-                .write_stored_account_meta(
-                    &stored_account_meta,
-                    &mut cursor,
-                    &mut footer,
-                    &mut account_metas,
-                    &mut account_pubkeys,
-                    &mut owners_table,
-                    data_block_writer,
-                    &mut buffered_account_metas,
-                    &mut buffered_account_pubkeys,
-                    &mut dummy_hash,
-                    &mut account_index_entries,
-                )
-                .unwrap();
+            let (account, pubkey, hash, write_version) = accounts.get(i);
+            input_pubkey_map.insert(pubkey, i);
+            if let Some(account) = account {
+                data_block_writer = self
+                    .write_single_account(
+                        account.lamports(),
+                        account.rent_epoch(),
+                        account.data(),
+                        account.owner(),
+                        account.executable(),
+                        pubkey,
+                        hash,
+                        write_version,
+                        &mut cursor,
+                        &mut footer,
+                        &mut account_metas,
+                        &mut account_pubkeys,
+                        &mut owners_table,
+                        data_block_writer,
+                        &mut buffered_account_metas,
+                        &mut buffered_account_pubkeys,
+                        &mut dummy_hash,
+                        &mut account_index_entries,
+                    )
+                    .unwrap();
+            } else {
+                data_block_writer = self
+                    .write_single_account(
+                        0,        // lamports
+                        u64::MAX, // rent_epoch,
+                        &default_data,
+                        &default_pubkey,
+                        false, // executable
+                        pubkey,
+                        hash,
+                        write_version,
+                        &mut cursor,
+                        &mut footer,
+                        &mut account_metas,
+                        &mut account_pubkeys,
+                        &mut owners_table,
+                        data_block_writer,
+                        &mut buffered_account_metas,
+                        &mut buffered_account_pubkeys,
+                        &mut dummy_hash,
+                        &mut account_index_entries,
+                    )
+                    .unwrap();
+            }
         }
 
         // Persist the last block if any
@@ -285,14 +305,14 @@ impl TieredStorageWriter {
         Ok(())
     }
 
-    fn flush_account_block<T: TieredAccountMeta>(
+    fn flush_account_block<'a, T: TieredAccountMeta>(
         &self,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
         account_metas: &mut Vec<T>,
-        account_pubkeys: &mut Vec<Pubkey>,
+        account_pubkeys: &mut Vec<&'a Pubkey>,
         input_metas: &mut Vec<T>,
-        input_pubkeys: &mut Vec<Pubkey>,
+        input_pubkeys: &mut Vec<&'a Pubkey>,
         data_block_writer: ByteBlockWriter,
     ) -> TieredStorageResult<()> {
         // Persist the current block
@@ -321,42 +341,56 @@ impl TieredStorageWriter {
         Ok(())
     }
 
-    fn write_stored_account_meta<T: TieredAccountMeta>(
+    fn write_single_account<'a, T: TieredAccountMeta>(
         &self,
-        account: &StoredAccountMeta,
+        lamports: u64,
+        rent_epoch: Epoch,
+        account_data: &[u8],
+        owner: &Pubkey,
+        executable: bool,
+        address: &'a Pubkey,
+        hash: &Hash,
+        write_version: StoredMetaWriteVersion,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
         account_metas: &mut Vec<T>,
-        account_pubkeys: &mut Vec<Pubkey>,
+        account_pubkeys: &mut Vec<&'a Pubkey>,
         owners_table: &mut AccountOwnerTable,
         mut data_block: ByteBlockWriter,
         buffered_account_metas: &mut Vec<T>,
-        buffered_account_pubkeys: &mut Vec<Pubkey>,
+        buffered_account_pubkeys: &mut Vec<&'a Pubkey>,
         _hash: &mut Hash,
-        account_index_entries: &mut Vec<AccountIndexWriterEntry>,
+        account_index_entries: &mut Vec<AccountIndexWriterEntry<'a>>,
     ) -> TieredStorageResult<ByteBlockWriter> {
-        if !account.sanitize() {
-            // Not Ok
-        }
-
         let optional_fields = AccountMetaOptionalFields {
-            rent_epoch: Some(account.rent_epoch()),
-            account_hash: Some(*account.hash()),
-            write_version: Some(account.write_version()),
+            rent_epoch: (rent_epoch != u64::MAX).then(|| rent_epoch),
+            account_hash: (*hash != Hash::default()).then(|| *hash),
+            // TODO(yhchiang): free to kill the write_version
+            write_version: (write_version != u64::MAX).then(|| write_version),
         };
 
         let account_raw_size =
-            std::mem::size_of::<T>() + account.data_len() as usize + optional_fields.size();
+            std::mem::size_of::<T>() + account_data.len() + optional_fields.size();
 
         if !T::supports_shared_account_block() || account_raw_size > ACCOUNT_DATA_BLOCK_SIZE {
-            account_index_entries.push(self.write_blob_account_block(
-                cursor,
-                footer,
-                account_metas,
-                account_pubkeys,
-                owners_table,
-                account,
-            )?);
+            account_index_entries.push(
+                self.write_blob_account_block(
+                    cursor,
+                    footer,
+                    account_metas,
+                    account_pubkeys,
+                    owners_table,
+                    lamports,
+                    rent_epoch,
+                    account_data,
+                    owner,
+                    executable,
+                    address,
+                    hash,
+                    write_version,
+                )
+                .unwrap(),
+            );
             return Ok(data_block);
         }
 
@@ -372,80 +406,81 @@ impl TieredStorageWriter {
                 buffered_account_metas,
                 buffered_account_pubkeys,
                 data_block,
-            )?;
+            )
+            .unwrap();
             data_block = self.new_data_block_writer(footer);
         }
 
-        let owner_index = owners_table.check_and_add(account.owner());
+        let owner_index = owners_table.check_and_add(owner);
         let local_offset = data_block.raw_len();
 
         account_index_entries.push(AccountIndexWriterEntry {
-            pubkey: *account.pubkey(),
+            pubkey: address,
             block_offset: *cursor,
             intra_block_offset: local_offset as u64,
         });
 
         let mut flags = AccountMetaFlags::new_from(&optional_fields);
-        flags.set_executable(account.executable());
+        flags.set_executable(executable);
         let meta = T::new()
-            .with_lamports(account.lamports())
+            .with_lamports(lamports)
             .with_owner_index(owner_index)
-            .with_account_data_size(account.data_len())
-            .with_account_data_padding(((8 - (account.data_len() % 8)) % 8).try_into().unwrap())
+            .with_account_data_size(account_data.len() as u64)
+            .with_account_data_padding(((8 - (account_data.len() % 8)) % 8).try_into().unwrap())
             .with_flags(&flags);
 
-        // COMMENT(yhchiang): MetaAndData
-        {
-            data_block.write_type(&meta)?;
-        }
-
-        data_block.write(account.data())?;
+        // account meta first, then data, then optional fields.
+        data_block.write_type(&meta)?;
+        data_block.write(account_data)?;
         data_block.write_optional_fields(&optional_fields)?;
 
         buffered_account_metas.push(meta);
-        buffered_account_pubkeys.push(*account.pubkey());
+        buffered_account_pubkeys.push(address);
 
         Ok(data_block)
     }
 
-    fn write_blob_account_block<T: TieredAccountMeta>(
+    fn write_blob_account_block<'a, T: TieredAccountMeta>(
         &self,
         cursor: &mut u64,
         footer: &mut TieredStorageFooter,
         account_metas: &mut Vec<T>,
-        account_pubkeys: &mut Vec<Pubkey>,
+        account_pubkeys: &mut Vec<&'a Pubkey>,
         owners_table: &mut AccountOwnerTable,
-        account: &StoredAccountMeta,
-    ) -> TieredStorageResult<AccountIndexWriterEntry> {
-        let owner_index = owners_table.check_and_add(account.owner());
+        lamports: u64,
+        rent_epoch: Epoch,
+        account_data: &[u8],
+        owner: &Pubkey,
+        executable: bool,
+        address: &'a Pubkey,
+        hash: &Hash,
+        write_version: StoredMetaWriteVersion,
+    ) -> TieredStorageResult<AccountIndexWriterEntry<'a>> {
+        let owner_index = owners_table.check_and_add(owner);
         let optional_fields = AccountMetaOptionalFields {
-            rent_epoch: Some(account.rent_epoch()),
-            account_hash: Some(*account.hash()),
-            write_version: Some(account.write_version()),
+            rent_epoch: (rent_epoch != DEFAULT_RENT_EPOCH).then(|| rent_epoch),
+            account_hash: (*hash != *DEFAULT_ACCOUNT_HASH).then(|| *hash),
+            write_version: (write_version != DEFAULT_WRITE_VERSION).then(|| write_version),
         };
 
         let index_entry = AccountIndexWriterEntry {
-            pubkey: *account.pubkey(),
+            pubkey: address,
             block_offset: *cursor,
             intra_block_offset: 0,
         };
 
         let mut flags = AccountMetaFlags::new_from(&optional_fields);
-        flags.set_executable(account.executable());
+        flags.set_executable(executable);
         let meta = T::new()
-            .with_lamports(account.lamports())
+            .with_lamports(lamports)
             .with_owner_index(owner_index)
-            .with_account_data_size(account.data_len())
-            .with_account_data_padding(((8 - (account.data_len() % 8)) % 8).try_into().unwrap())
+            .with_account_data_size(account_data.len() as u64)
+            .with_account_data_padding(((8 - (account_data.len() % 8)) % 8).try_into().unwrap())
             .with_flags(&flags);
 
         let mut writer = ByteBlockWriter::new(footer.account_block_format);
-        // COMMENT(yhchiang): MetaAndData
-        {
-            writer.write_type(&meta)?;
-        }
-
-        writer.write(account.data())?;
+        writer.write_type(&meta)?;
+        writer.write(account_data)?;
         if meta.account_data_padding() > 0 {
             let padding = [0u8; 8];
             writer.write(&padding[0..meta.account_data_padding() as usize])?;
@@ -457,13 +492,14 @@ impl TieredStorageWriter {
         self.storage.write_bytes(&data)?;
 
         account_metas.push(meta);
-        account_pubkeys.push(*account.pubkey());
+        account_pubkeys.push(address);
 
         *cursor += compressed_length as u64;
         footer.account_entry_count += 1;
 
         Ok(index_entry)
     }
+    /*
 
     #[allow(dead_code)]
     pub fn write_from_append_vec(&self, append_vec: &AppendVec) -> TieredStorageResult<()> {
@@ -575,4 +611,5 @@ impl TieredStorageWriter {
 
         Ok(())
     }
+    */
 }
