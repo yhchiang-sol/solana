@@ -1,8 +1,16 @@
 use {
     crate::{
-        account_storage::meta::StoredMetaWriteVersion, tiered_storage::meta::TieredAccountMeta,
+        account_storage::meta::StoredMetaWriteVersion,
+        append_vec::MatchAccountOwnerError,
+        tiered_storage::{
+            footer::{AccountMetaFormat, TieredStorageFooter},
+            hot::HotAccountsFileReader,
+            meta::TieredAccountMeta,
+            TieredStorageResult,
+        },
     },
     solana_sdk::{account::ReadableAccount, hash::Hash, pubkey::Pubkey, stake_history::Epoch},
+    std::path::Path,
 };
 
 /// The struct that offers read APIs for accessing a TieredAccount.
@@ -40,6 +48,13 @@ impl<'accounts_file, M: TieredAccountMeta> TieredReadableAccount<'accounts_file,
     /// Returns the write version of the account.
     pub fn write_version(&self) -> Option<StoredMetaWriteVersion> {
         self.meta.write_version(self.account_block)
+    }
+
+    pub fn stored_size(&self) -> usize {
+        std::mem::size_of::<M>()
+            + std::mem::size_of::<Pubkey>()
+            + std::mem::size_of::<Pubkey>()
+            + self.account_block.len()
     }
 
     /// Returns the data associated to this account.
@@ -82,4 +97,54 @@ impl<'accounts_file, M: TieredAccountMeta> ReadableAccount
     fn data(&self) -> &'accounts_file [u8] {
         self.data()
     }
+}
+
+/// The reader of a tiered accounts file.
+#[derive(Debug)]
+pub enum TieredAccountsFileReader {
+    // Cold(ColdStorageReader),
+    Hot(HotAccountsFileReader),
+}
+
+impl TieredAccountsFileReader {
+    /// Creates a reader for the specified tiered storage accounts file.
+    pub fn new_from_path<P: AsRef<Path>>(path: P) -> TieredStorageResult<Self> {
+        let footer = TieredStorageFooter::new_from_path(&path)?;
+
+        match footer.account_meta_format {
+            AccountMetaFormat::Hot => Ok(Self::Hot(HotAccountsFileReader::new_from_path(path)?)),
+        }
+    }
+
+    /// Returns the total number of accounts.
+    pub fn num_accounts(&self) -> usize {
+        match self {
+            Self::Hot(hs) => hs.num_accounts(),
+        }
+    }
+
+    /// Given the account associated with the specified index, this
+    /// function returns the index to the specified input `owners` vector if the
+    /// specified account is owned by the owner located at the returned index.
+    ///
+    /// Otherwise, MatchAccountOwnerError will be returned.
+    pub fn account_matches_owners(
+        &self,
+        index: usize,
+        owners: &[&Pubkey],
+    ) -> Result<usize, MatchAccountOwnerError> {
+        match self {
+            Self::Hot(hs) => hs.account_matches_owners(index, owners),
+        }
+    }
+
+    /*
+    /// Returns (account metadata, next_index) pair for the account at the
+    /// specified `index` if any.  Otherwise return None.  The function also
+    /// returns the multiplied index to the next entry.
+    pub fn get_account<'a>(&'a self, index: usize) -> Option<(StoredAccountMeta<'a>, usize)> {
+        match self {
+            Self::Hot(hs) => hs.get_account(index),
+        }
+    }*/
 }
