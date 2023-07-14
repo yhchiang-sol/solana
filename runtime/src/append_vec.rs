@@ -588,6 +588,7 @@ impl AppendVec {
         let mut offsets = Vec::with_capacity(len);
         for i in skip..len {
             let (account, pubkey, hash, write_version_obsolete) = accounts.get(i);
+            println!("av hash = {}", hash);
             let account_meta = account
                 .map(|account| AccountMeta {
                     lamports: account.lamports(),
@@ -664,7 +665,10 @@ pub mod tests {
             self.current_len.store(len, Ordering::Release);
         }
 
-        fn append_account_test(&self, data: &(StoredMeta, AccountSharedData)) -> Option<usize> {
+        pub(crate) fn append_account_test(
+            &self,
+            data: &(StoredMeta, AccountSharedData),
+        ) -> Option<usize> {
             let slot_ignored = Slot::MAX;
             let accounts = [(&data.0.pubkey, &data.1)];
             let slice = &accounts[..];
@@ -686,6 +690,8 @@ pub mod tests {
         pub(crate) fn ref_executable_byte(&self) -> &u8 {
             match self {
                 Self::AppendVec(av) => av.ref_executable_byte(),
+                // Self::Cold(_) => unimplemented!(),
+                Self::Hot(_) => unimplemented!(),
             }
         }
     }
@@ -1174,7 +1180,7 @@ pub mod tests {
             av.append_account_test(&create_test_account(10)).unwrap();
 
             let accounts = av.accounts(0);
-            let StoredAccountMeta::AppendVec(account) = accounts.first().unwrap();
+            let StoredAccountMeta::AppendVec(account) = accounts.first().unwrap() else {unimplemented!()};
             account.set_data_len_unsafe(crafted_data_len);
             assert_eq!(account.data_len(), crafted_data_len);
 
@@ -1202,7 +1208,7 @@ pub mod tests {
             av.append_account_test(&create_test_account(10)).unwrap();
 
             let accounts = av.accounts(0);
-            let StoredAccountMeta::AppendVec(account) = accounts.first().unwrap();
+            let StoredAccountMeta::AppendVec(account) = accounts.first().unwrap() else {unimplemented!()};
             account.set_data_len_unsafe(too_large_data_len);
             assert_eq!(account.data_len(), too_large_data_len);
 
@@ -1238,14 +1244,14 @@ pub mod tests {
             assert_eq!(*accounts[0].ref_executable_byte(), 0);
             assert_eq!(*accounts[1].ref_executable_byte(), 1);
 
-            let StoredAccountMeta::AppendVec(account) = &accounts[0];
+            let StoredAccountMeta::AppendVec(account) = &accounts[0] else {unimplemented!()};
             let crafted_executable = u8::max_value() - 1;
 
             account.set_executable_as_byte(crafted_executable);
 
             // reload crafted accounts
             let accounts = av.accounts(0);
-            let StoredAccountMeta::AppendVec(account) = accounts.first().unwrap();
+            let StoredAccountMeta::AppendVec(account) = accounts.first().unwrap() else {unimplemented!()};
 
             // upper 7-bits are not 0, so sanitization should fail
             assert!(!account.sanitize_executable());
