@@ -155,10 +155,14 @@ impl TieredStorage {
 mod tests {
     use {
         super::*,
-        crate::account_storage::meta::StoredMetaWriteVersion,
+        crate::account_storage::meta::{StoredMeta, StoredMetaWriteVersion},
         footer::{TieredStorageFooter, TieredStorageMagicNumber},
-        hot::HOT_FORMAT,
-        solana_sdk::{account::AccountSharedData, clock::Slot, pubkey::Pubkey},
+        hot::{HotAccountMeta, HOT_FORMAT},
+        solana_sdk::{
+            account::{Account, AccountSharedData},
+            clock::Slot,
+            pubkey::Pubkey,
+        },
         std::mem::ManuallyDrop,
         tempfile::tempdir,
     };
@@ -301,5 +305,126 @@ mod tests {
         }
         // expect the file does not exist as the file has been removed on drop
         assert!(!tiered_storage_path.try_exists().unwrap());
+    }
+
+    fn create_test_account(seed: u64) -> (StoredMeta, AccountSharedData) {
+        let data_byte = (seed % 256) as u8;
+        let account = Account {
+            lamports: seed,
+            data: (0..seed as usize).map(|_| data_byte).collect(),
+            owner: Pubkey::new_unique(),
+            executable: seed % 2 > 0,
+            rent_epoch: if seed % 3 > 0 { seed as u64 } else { 0 },
+        };
+
+        let stored_meta = StoredMeta {
+            write_version_obsolete: seed,
+            pubkey: Pubkey::new_unique(),
+            data_len: seed,
+        };
+        (stored_meta, AccountSharedData::from(account))
+    }
+
+    fn write_accounts_test_helper(
+        path_suffix: &str,
+        account_data_sizes: &[u64],
+        format: TieredStorageFormat,
+    ) {
+        let accounts: Vec<(StoredMeta, AccountSharedData)> = account_data_sizes
+            .iter()
+            .map(|size| create_test_account(*size))
+            .collect();
+
+        let account_refs: Vec<(&Pubkey, &AccountSharedData)> = accounts
+            .iter()
+            .map(|account| (&account.0.pubkey, &account.1))
+            .collect();
+
+        // Slot information is not used here
+        let account_data = (Slot::MAX, &account_refs[..]);
+        let hashes: Vec<_> = (0..account_data_sizes.len())
+            .map(|_| Hash::new_unique())
+            .collect();
+        let write_versions: Vec<_> = accounts
+            .iter()
+            .map(|account| account.0.write_version_obsolete)
+            .collect();
+
+        let storable_accounts =
+            StorableAccountsWithHashesAndWriteVersions::new_with_hashes_and_write_versions(
+                &account_data,
+                hashes.iter().collect(),
+                write_versions,
+            );
+
+        let temp_dir = tempdir().unwrap();
+        let tiered_storage_path = temp_dir.path().join(path_suffix);
+        let tiered_storage = TieredStorage::new_writable(&tiered_storage_path, format.clone());
+        _ = tiered_storage.write_accounts(&storable_accounts, 0);
+
+        verify_hot_storage(&tiered_storage, &storable_accounts, format);
+    }
+
+    fn verify_hot_storage<
+        'a,
+        'b,
+        T: ReadableAccount + Sync,
+        U: StorableAccounts<'a, T>,
+        V: Borrow<Hash>,
+    >(
+        tiered_storage: &TieredStorage,
+        accounts: &StorableAccountsWithHashesAndWriteVersions<'a, 'b, T, U, V>,
+        format: TieredStorageFormat,
+    ) {
+        let reader = tiered_storage.reader().unwrap();
+        assert_eq!(reader.num_accounts(), accounts.len());
+
+        let mut account_block_size = 0;
+        let num_accounts = accounts.accounts.len();
+        for i in 0..num_accounts {
+            let (account, _, hash, write_version) = accounts.get(i);
+            // the size with padding
+            account_block_size += ((account.unwrap().data().len() + 7) / 8) * 8;
+
+            // optional fields size
+            if *hash != Hash::default() {
+                account_block_size += std::mem::size_of::<Hash>();
+            }
+            if write_version != u64::MAX {
+                account_block_size += std::mem::size_of::<StoredMetaWriteVersion>();
+            }
+            if account.unwrap().rent_epoch() != u64::MAX {
+                account_block_size += std::mem::size_of::<u64>();
+            }
+        }
+        account_block_size += num_accounts * std::mem::size_of::<HotAccountMeta>();
+
+        let footer = reader.footer();
+        let expected_footer = TieredStorageFooter {
+            account_meta_format: format.account_meta_format,
+            owners_block_format: format.owners_block_format,
+            account_index_format: format.account_index_format,
+            account_block_format: format.account_block_format,
+            account_entry_count: accounts.len() as u32,
+            account_index_offset: account_block_size as u64,
+            owners_offset: (account_block_size
+                + format.account_index_format.entry_size() * num_accounts)
+                as u64,
+            hash: footer.hash.clone(),
+            ..TieredStorageFooter::default()
+        };
+
+        // TODO(yhchiang): verify account meta and data
+
+        assert_eq!(*footer, expected_footer);
+    }
+
+    #[test]
+    fn test_write_accounts_small_accounts() {
+        write_accounts_test_helper(
+            "test_write_accounts_small_accounts",
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            HOT_FORMAT.clone(),
+        );
     }
 }
