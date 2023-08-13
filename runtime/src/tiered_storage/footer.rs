@@ -1,6 +1,6 @@
 use {
     crate::tiered_storage::{
-        error::TieredStorageError, file::TieredStorageFile, index::AccountIndexFormat,
+        error::TieredStorageError, file::TieredStorageFile, index::AccountIndex,
         mmap_utils::get_type, TieredStorageResult as TsResult,
     },
     memmap2::Mmap,
@@ -95,7 +95,7 @@ pub struct TieredStorageFooter {
     /// The format of the owners block.
     pub owners_block_format: OwnersBlockFormat,
     /// The format of the account index block.
-    pub account_index_format: AccountIndexFormat,
+    pub account_index_format: AccountIndex,
     /// The format of the account block.
     pub account_block_format: AccountBlockFormat,
 
@@ -149,7 +149,7 @@ impl Default for TieredStorageFooter {
         Self {
             account_meta_format: AccountMetaFormat::default(),
             owners_block_format: OwnersBlockFormat::default(),
-            account_index_format: AccountIndexFormat::default(),
+            account_index_format: AccountIndex::default(),
             account_block_format: AccountBlockFormat::default(),
             account_entry_count: 0,
             account_meta_entry_size: 0,
@@ -241,7 +241,7 @@ mod tests {
         let expected_footer = TieredStorageFooter {
             account_meta_format: AccountMetaFormat::Hot,
             owners_block_format: OwnersBlockFormat::LocalIndex,
-            account_index_format: AccountIndexFormat::AddressAndOffset,
+            account_index_format: AccountIndex::AddressAndOffset,
             account_block_format: AccountBlockFormat::AlignedRaw,
             account_entry_count: 300,
             account_meta_entry_size: 24,
