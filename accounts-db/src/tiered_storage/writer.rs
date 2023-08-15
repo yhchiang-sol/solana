@@ -14,25 +14,37 @@ use {
             hot::HotAccountMeta,
             index::AccountIndexWriterEntry,
             meta::{AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta},
+            owner::AccountOwnersTable,
             TieredStorageFormat, TieredStorageResult,
         },
     },
-    solana_sdk::{account::ReadableAccount, hash::Hash},
+    solana_sdk::{account::ReadableAccount, hash::Hash, pubkey::Pubkey},
     std::{borrow::Borrow, path::Path},
 };
 
 const EMPTY_ACCOUNT_DATA: [u8; 0] = [0u8; 0];
 const PADDING: [u8; 8] = [0x8; 8];
 
+lazy_static! {
+    static ref DEFAULT_ADDRESS: Pubkey = Pubkey::default();
+}
+
 /// A helper function that extracts the lamports, rent epoch, and account data
 /// from the specified ReadableAccount, or returns the default of these values
 /// when the account is None (e.g. a zero-lamport account).
-fn get_account_fields<T: ReadableAccount + Sync>(account: Option<&T>) -> (u64, u64, &[u8]) {
+fn get_account_fields<T: ReadableAccount + Sync>(
+    account: Option<&T>,
+) -> (u64, &Pubkey, u64, &[u8]) {
     if let Some(account) = account {
-        return (account.lamports(), account.rent_epoch(), account.data());
+        return (
+            account.lamports(),
+            account.owner(),
+            account.rent_epoch(),
+            account.data(),
+        );
     }
 
-    (0, u64::MAX, &EMPTY_ACCOUNT_DATA)
+    (0, &DEFAULT_ADDRESS, u64::MAX, &EMPTY_ACCOUNT_DATA)
 }
 
 #[derive(Debug)]
@@ -57,14 +69,17 @@ impl<'format> TieredStorageWriter<'format> {
     ///
     /// The function currently only supports HotAccountMeta, and will
     /// be extended to cover more TieredAccountMeta in future PRs.
-    fn write_single_account<T: TieredAccountMeta, U: ReadableAccount + Sync>(
+    fn write_single_account<'a, T: TieredAccountMeta, U: ReadableAccount + Sync>(
         &self,
-        account: Option<&U>,
+        account: Option<&'a U>,
         account_hash: &Hash,
         write_version: StoredMetaWriteVersion,
         footer: &mut TieredStorageFooter,
+        owners_table: &mut AccountOwnersTable<'a>,
     ) -> TieredStorageResult<usize> {
-        let (lamports, rent_epoch, account_data) = get_account_fields(account);
+        let (lamports, owner, rent_epoch, account_data) = get_account_fields(account);
+        println!("write {owner}");
+        let owner_index = owners_table.try_insert(owner);
 
         let optional_fields =
             AccountMetaOptionalFields::new_from_fields(rent_epoch, account_hash, write_version);
@@ -72,6 +87,7 @@ impl<'format> TieredStorageWriter<'format> {
         let flags = AccountMetaFlags::new_from(&optional_fields);
         let meta = T::new()
             .with_lamports(lamports)
+            .with_owner_index(owner_index)
             .with_account_data_size(account_data.len() as u64)
             .with_account_data_padding(((8 - (account_data.len() % 8)) % 8).try_into().unwrap())
             .with_flags(&flags);
@@ -122,6 +138,7 @@ impl<'format> TieredStorageWriter<'format> {
         let mut cursor: usize = 0;
         let len = accounts.accounts.len();
         let mut index_entries = Vec::<AccountIndexWriterEntry<'a>>::new();
+        let mut owners_table = AccountOwnersTable::new();
         for i in skip..len {
             let (account, address, hash, write_version) = accounts.get(i);
 
@@ -130,6 +147,7 @@ impl<'format> TieredStorageWriter<'format> {
                 hash,
                 write_version,
                 &mut footer,
+                &mut owners_table,
             )?;
             index_entries.push(AccountIndexWriterEntry {
                 address,
@@ -148,7 +166,11 @@ impl<'format> TieredStorageWriter<'format> {
             .write_index_block(&self.storage, &index_entries)?;
 
         footer.owners_offset = cursor as u64;
-        // TODO(yhchiang): owners block will be included in a separate PR.
+        let owner_stored_size = footer
+            .owners_block_format
+            .write_owners_block(&self.storage, &owners_table)?;
+
+        assert_eq!(owner_stored_size, owners_table.len() * (std::mem::size_of::<Pubkey>()));
 
         footer.write_footer_block(&self.storage)?;
 

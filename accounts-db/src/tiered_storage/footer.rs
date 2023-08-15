@@ -1,7 +1,7 @@
 use {
     crate::tiered_storage::{
         error::TieredStorageError, file::TieredStorageFile, index::AccountIndexFormat,
-        mmap_utils::get_type, TieredStorageResult as TsResult,
+        mmap_utils::get_type, owner::OwnersBlockFormat, TieredStorageResult as TsResult,
     },
     memmap2::Mmap,
     solana_sdk::{hash::Hash, pubkey::Pubkey},
@@ -69,23 +69,6 @@ pub enum AccountBlockFormat {
     #[default]
     AlignedRaw = 0,
     Lz4 = 1,
-}
-
-#[repr(u16)]
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Default,
-    Eq,
-    Hash,
-    PartialEq,
-    num_enum::IntoPrimitive,
-    num_enum::TryFromPrimitive,
-)]
-pub enum OwnersBlockFormat {
-    #[default]
-    LocalIndex = 0,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

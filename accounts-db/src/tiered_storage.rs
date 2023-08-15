@@ -8,18 +8,20 @@ pub mod hot;
 pub mod index;
 pub mod meta;
 pub mod mmap_utils;
+pub mod owner;
 pub mod readable;
 pub mod writer;
 
 use {
     crate::{
-        account_storage::meta::{StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo},
+account_storage::meta::{StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo},
         storable_accounts::StorableAccounts,
     },
     error::TieredStorageError,
-    footer::{AccountBlockFormat, AccountMetaFormat, OwnersBlockFormat},
+    footer::{AccountBlockFormat, AccountMetaFormat},
     index::AccountIndexFormat,
     once_cell::sync::OnceCell,
+    owner::OwnersBlockFormat,
     readable::TieredStorageReader,
     solana_sdk::{account::ReadableAccount, hash::Hash},
     std::{
@@ -155,7 +157,10 @@ impl TieredStorage {
 mod tests {
     use {
         super::*,
-        crate::account_storage::meta::{StoredMeta, StoredMetaWriteVersion},
+        crate::{
+            account_storage::meta::{StoredMeta, StoredMetaWriteVersion},
+            accounts_file::ALIGN_BOUNDARY_OFFSET,
+        },
         footer::{TieredStorageFooter, TieredStorageMagicNumber},
         hot::{HotAccountMeta, HOT_FORMAT},
         solana_sdk::{
@@ -406,10 +411,12 @@ mod tests {
         // the offset of account index block
         let mut expected_account_blocks_size = 0;
         let num_accounts = expected_accounts.accounts.len();
+        let mut all_owners = Vec::<&Pubkey>::new();
 
         // compute the total size of all optional fields
         for i in 0..num_accounts {
             let (account, _, hash, write_version) = expected_accounts.get(i);
+            all_owners.push(account.unwrap().owner());
             // the size with padding
             expected_account_blocks_size += ((account.unwrap().data().len() + 7) / 8) * 8;
 
@@ -439,9 +446,15 @@ mod tests {
             ..TieredStorageFooter::default()
         };
 
+        // verify the owner using the account_matches_owners API
         for i in 0..num_accounts {
             let (_, address, _, _) = expected_accounts.get(i);
             assert_eq!(reader.account_address(i).unwrap(), address);
+
+            assert_eq!(
+                reader.account_matches_owners(
+                    i * ALIGN_BOUNDARY_OFFSET, &all_owners).unwrap(),
+                i);
             // TODO(yhchiang): verify account meta and data once the reader side
             // is implemented in a separate PR.
         }

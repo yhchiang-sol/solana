@@ -1,6 +1,7 @@
 use {
     crate::{
         account_storage::meta::StoredMetaWriteVersion,
+        append_vec::MatchAccountOwnerError,
         tiered_storage::{
             footer::{AccountMetaFormat, TieredStorageFooter},
             hot::HotStorageReader,
@@ -126,6 +127,27 @@ impl TieredStorageReader {
     pub(crate) fn account_address(&self, index: usize) -> TieredStorageResult<&Pubkey> {
         match self {
             Self::Hot(hot) => hot.account_address(index),
+        }
+    }
+
+    /// Given the account associated with the specified index, this
+    /// function returns the index to the specified input `owners` vector if the
+    /// specified account is owned by the owner located at the returned index.
+    ///
+    /// Otherwise, MatchAccountOwnerError will be returned.
+    pub fn account_matches_owners(
+        &self,
+        index: usize,
+        owners: &[&Pubkey],
+    ) -> Result<usize, MatchAccountOwnerError> {
+        match self {
+            Self::Hot(hs) => hs.account_matches_owners(index, owners),
+        }
+    }
+
+    pub fn owner_address(&self, index: usize) -> TieredStorageResult<&Pubkey> {
+        match self {
+            Self::Hot(hs) => hs.owner_address(index),
         }
     }
 }
