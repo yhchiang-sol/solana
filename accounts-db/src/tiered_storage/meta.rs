@@ -2,6 +2,7 @@
 //! The account meta and related structs for the tiered storage.
 use {
     crate::{accounts_hash::AccountHash, tiered_storage::owners::OwnerOffset},
+    bytemuck::{Pod, Zeroable},
     modular_bitfield::prelude::*,
     solana_sdk::stake_history::Epoch,
 };
@@ -9,7 +10,7 @@ use {
 /// The struct that handles the account meta flags.
 #[bitfield(bits = 32)]
 #[repr(C)]
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Pod, Zeroable)]
 pub struct AccountMetaFlags {
     /// whether the account meta has rent epoch
     pub has_rent_epoch: bool,

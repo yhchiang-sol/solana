@@ -2,6 +2,7 @@ use {
     crate::{accounts_file::ALIGN_BOUNDARY_OFFSET, u64_align},
     log::*,
     memmap2::Mmap,
+    std::io::Result as IoResult,
 };
 
 /// Borrows a value of type `T` from `mmap`
@@ -35,7 +36,7 @@ pub unsafe fn get_type<T>(mmap: &Mmap, offset: usize) -> IoResult<(&T, usize)> {
 /// doesn't overrun the internal buffer. Otherwise return an Error.
 /// Also return the offset of the first byte after the requested data that
 /// falls on a 64-byte boundary.
-pub fn get_slice(map: &Mmap, offset: usize, size: usize) -> std::io::Result<(&[u8], usize)> {
+pub fn get_slice(map: &Mmap, offset: usize, size: usize) -> IoResult<(&[u8], usize)> {
     let (next, overflow) = offset.overflowing_add(size);
     if overflow || next > map.len() {
         error!(

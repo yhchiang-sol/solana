@@ -198,7 +198,7 @@ impl Default for TieredStorageFooter {
 }
 
 impl TieredStorageFooter {
-    pub fn new_from_path(path: impl AsRef<Path>) -> TsResult<Self> {
+    pub fn new_from_path(path: impl AsRef<Path>) -> TieredStorageResult<Self> {
         let file = TieredStorageFile::new_readonly(path);
         Self::new_from_footer_block(&file)
     }

@@ -27,7 +27,7 @@ impl TieredStorageFile {
         )
     }
 
-    pub fn new_writable(file_path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+    pub fn new_writable(file_path: impl AsRef<Path>) -> IoResult<Self> {
         Ok(Self(
             OpenOptions::new()
                 .create_new(true)
@@ -87,15 +87,15 @@ impl TieredStorageFile {
         self.read_bytes(bytes)
     }
 
-    pub fn seek(&self, offset: u64) -> Result<u64, std::io::Error> {
+    pub fn seek(&self, offset: u64) -> IoResult<u64> {
         (&self.0).seek(SeekFrom::Start(offset))
     }
 
-    pub fn seek_from_end(&self, offset: i64) -> Result<u64, std::io::Error> {
+    pub fn seek_from_end(&self, offset: i64) -> IoResult<u64> {
         (&self.0).seek(SeekFrom::End(offset))
     }
 
-    pub fn write_bytes(&self, bytes: &[u8]) -> Result<usize, std::io::Error> {
+    pub fn write_bytes(&self, bytes: &[u8]) -> IoResult<usize> {
         (&self.0).write_all(bytes)?;
 
         Ok(bytes.len())

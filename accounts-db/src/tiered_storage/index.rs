@@ -3,6 +3,7 @@ use {
         file::TieredStorageFile, footer::TieredStorageFooter, mmap_utils::get_pod,
         TieredStorageResult,
     },
+    bytemuck::{Pod, Zeroable},
     memmap2::Mmap,
     solana_sdk::pubkey::Pubkey,
 };
@@ -17,7 +18,7 @@ pub struct AccountIndexWriterEntry<'a, Offset: AccountOffset> {
 }
 
 /// The offset to an account.
-pub trait AccountOffset {}
+pub trait AccountOffset: Clone + Copy + Pod + Zeroable {}
 
 /// The offset to an account/address entry in the accounts index block.
 /// This can be used to obtain the AccountOffset and address by looking through
@@ -71,7 +72,7 @@ impl IndexBlockFormat {
     /// Returns the address of the account given the specified index.
     pub fn get_account_address<'a>(
         &self,
-        map: &'a Mmap,
+        mmap: &'a Mmap,
         footer: &TieredStorageFooter,
         index_offset: IndexOffset,
     ) -> TieredStorageResult<&'a Pubkey> {
@@ -98,7 +99,7 @@ impl IndexBlockFormat {
     /// Returns the offset to the account given the specified index.
     pub fn get_account_offset<Offset: AccountOffset + Copy>(
         &self,
-        map: &Mmap,
+        mmap: &Mmap,
         footer: &TieredStorageFooter,
         index_offset: IndexOffset,
     ) -> TieredStorageResult<Offset> {
@@ -130,7 +131,7 @@ mod tests {
         super::*,
         crate::tiered_storage::{
             file::TieredStorageFile,
-            hot::{HotAccountOffset, HOT_ACCOUNT_ALIGNMENT},
+            hot::{HotAccountOffset, HOT_ACCOUNT_OFFSET_ALIGNMENT},
         },
         memmap2::MmapOptions,
         rand::Rng,
@@ -156,7 +157,7 @@ mod tests {
             .map(|address| AccountIndexWriterEntry {
                 address,
                 offset: HotAccountOffset::new(
-                    rng.gen_range(0..u32::MAX) as usize * HOT_ACCOUNT_ALIGNMENT,
+                    rng.gen_range(0..u32::MAX) as usize * HOT_ACCOUNT_OFFSET_ALIGNMENT,
                 )
                 .unwrap(),
             })
@@ -175,7 +176,7 @@ mod tests {
             .create(false)
             .open(&path)
             .unwrap();
-        let map = unsafe { MmapOptions::new().map(&file).unwrap() };
+        let mmap = unsafe { MmapOptions::new().map(&file).unwrap() };
         for (i, index_entry) in index_entries.iter().enumerate() {
             let account_offset = indexer
                 .get_account_offset::<HotAccountOffset>(&mmap, &footer, IndexOffset(i as u32))
