@@ -36,18 +36,14 @@ impl TieredStorageFile {
 
     pub fn write_type<T>(&self, value: &T) -> Result<usize, std::io::Error> {
         let ptr = value as *const _ as *const u8;
-        let slice = unsafe { std::slice::from_raw_parts(ptr, mem::size_of::<T>()) };
-        (&self.0).write_all(slice)?;
-
-        Ok(std::mem::size_of::<T>())
+        let bytes = unsafe { std::slice::from_raw_parts(ptr, mem::size_of::<T>()) };
+        self.write_bytes(bytes)
     }
 
     pub fn read_type<T>(&self, value: &mut T) -> Result<(), std::io::Error> {
         let ptr = value as *mut _ as *mut u8;
-        let slice = unsafe { std::slice::from_raw_parts_mut(ptr, mem::size_of::<T>()) };
-        (&self.0).read_exact(slice)?;
-
-        Ok(())
+        let bytes = unsafe { std::slice::from_raw_parts_mut(ptr, mem::size_of::<T>()) };
+        self.read_bytes(bytes)
     }
 
     pub fn seek(&self, offset: u64) -> Result<u64, std::io::Error> {
@@ -64,9 +60,7 @@ impl TieredStorageFile {
         Ok(bytes.len())
     }
 
-    pub fn read_bytes(&self, buffer: &mut [u8]) -> Result<(), std::io::Error> {
-        (&self.0).read_exact(buffer)?;
-
-        Ok(())
+    pub fn read_bytes(&self, buffer: &mut [u8]) -> IoResult<()> {
+        (&self.0).read_exact(buffer)
     }
 }
