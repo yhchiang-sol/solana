@@ -1,4 +1,4 @@
-use {std::path::PathBuf, thiserror::Error};
+use {super::footer::SanitizeFooterError, std::path::PathBuf, thiserror::Error};
 
 #[derive(Error, Debug)]
 pub enum TieredStorageError {
