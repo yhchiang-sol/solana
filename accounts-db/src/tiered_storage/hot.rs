@@ -11,7 +11,7 @@ use {
             },
             index::{AccountOffset, IndexBlockFormat, IndexOffset},
             meta::{AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta},
-            mmap_utils::get_type,
+            mmap_utils::get_pod,
             owners::{OwnerOffset, OwnersBlock},
             TieredStorageError, TieredStorageFormat, TieredStorageResult,
         },
@@ -195,7 +195,7 @@ impl TieredAccountMeta for HotAccountMeta {
             .then(|| {
                 let offset = self.optional_fields_offset(account_block)
                     + AccountMetaOptionalFields::rent_epoch_offset(self.flags());
-                byte_block::read_type::<Epoch>(account_block, offset).copied()
+                byte_block::read_pod::<Epoch>(account_block, offset).copied()
             })
             .flatten()
     }
@@ -208,7 +208,7 @@ impl TieredAccountMeta for HotAccountMeta {
             .then(|| {
                 let offset = self.optional_fields_offset(account_block)
                     + AccountMetaOptionalFields::account_hash_offset(self.flags());
-                byte_block::read_type::<AccountHash>(account_block, offset)
+                byte_block::read_pod::<AccountHash>(account_block, offset)
             })
             .flatten()
     }
@@ -450,13 +450,16 @@ pub mod tests {
             .with_flags(&flags);
 
         let mut writer = ByteBlockWriter::new(AccountBlockFormat::AlignedRaw);
-        writer.write_type(&expected_meta).unwrap();
-        writer.write_type(&account_data).unwrap();
-        writer.write_type(&padding).unwrap();
+        writer.write_pod(&expected_meta).unwrap();
+        // SAFETY: These values are POD, so they are safe to write.
+        unsafe {
+            writer.write_type(&account_data).unwrap();
+            writer.write_type(&padding).unwrap();
+        }
         writer.write_optional_fields(&optional_fields).unwrap();
         let buffer = writer.finish().unwrap();
 
-        let meta = byte_block::read_type::<HotAccountMeta>(&buffer, 0).unwrap();
+        let meta = byte_block::read_pod::<HotAccountMeta>(&buffer, 0).unwrap();
         assert_eq!(expected_meta, *meta);
         assert!(meta.flags().has_rent_epoch());
         assert!(meta.flags().has_account_hash());
@@ -546,7 +549,7 @@ pub mod tests {
                 .iter()
                 .map(|meta| {
                     let prev_offset = current_offset;
-                    current_offset += file.write_type(meta).unwrap();
+                    current_offset += file.write_pod(meta).unwrap();
                     HotAccountOffset::new(prev_offset).unwrap()
                 })
                 .collect();
