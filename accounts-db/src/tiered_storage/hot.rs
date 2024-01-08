@@ -8,6 +8,7 @@ use {
         accounts_hash::AccountHash,
         tiered_storage::{
             byte_block,
+            file::TieredStorageFile,
             footer::{
                 AccountBlockFormat, AccountMetaFormat, OwnersBlockFormat, TieredStorageFooter,
             },
@@ -34,6 +35,19 @@ pub const HOT_FORMAT: TieredStorageFormat = TieredStorageFormat {
     account_block_format: AccountBlockFormat::AlignedRaw,
 };
 
+/// An helper function that creates a new default footer for hot
+/// accounts storage.
+fn new_hot_footer() -> TieredStorageFooter {
+    TieredStorageFooter {
+        account_meta_format: HOT_FORMAT.account_meta_format,
+        account_meta_entry_size: HOT_FORMAT.meta_entry_size as u32,
+        account_block_format: HOT_FORMAT.account_block_format,
+        index_block_format: HOT_FORMAT.index_block_format,
+        owners_block_format: HOT_FORMAT.owners_block_format,
+        ..TieredStorageFooter::default()
+    }
+}
+
 /// The maximum number of padding bytes used in a hot account entry.
 const MAX_HOT_PADDING: u8 = 7;
 
@@ -45,10 +59,10 @@ const MAX_HOT_OWNER_OFFSET: OwnerOffset = OwnerOffset((1 << 29) - 1);
 /// file is mmapped.  In addition, as all hot accounts are aligned, it allows
 /// each hot accounts file to handle more accounts with the same number of
 /// bytes in HotAccountOffset.
-pub(crate) const HOT_ACCOUNT_OFFSET_ALIGNMENT: usize = 8;
+pub(crate) const HOT_ACCOUNT_ALIGNMENT: usize = 8;
 
 /// The maximum supported offset for hot accounts storage.
-const MAX_HOT_ACCOUNT_OFFSET: usize = u32::MAX as usize * HOT_ACCOUNT_OFFSET_ALIGNMENT;
+const MAX_HOT_ACCOUNT_OFFSET: usize = u32::MAX as usize * HOT_ACCOUNT_ALIGNMENT;
 
 #[bitfield(bits = 32)]
 #[repr(C)]
@@ -85,20 +99,20 @@ impl HotAccountOffset {
             ));
         }
 
-        // Hot accounts are aligned based on HOT_ACCOUNT_OFFSET_ALIGNMENT.
-        if offset % HOT_ACCOUNT_OFFSET_ALIGNMENT != 0 {
+        // Hot accounts are aligned based on HOT_ACCOUNT_ALIGNMENT.
+        if offset % HOT_ACCOUNT_ALIGNMENT != 0 {
             return Err(TieredStorageError::OffsetAlignmentError(
                 offset,
-                HOT_ACCOUNT_OFFSET_ALIGNMENT,
+                HOT_ACCOUNT_ALIGNMENT,
             ));
         }
 
-        Ok(HotAccountOffset((offset / HOT_ACCOUNT_OFFSET_ALIGNMENT) as u32))
+        Ok(HotAccountOffset((offset / HOT_ACCOUNT_ALIGNMENT) as u32))
     }
 
     /// Returns the offset to the account.
     fn offset(&self) -> usize {
-        self.0 as usize * HOT_ACCOUNT_OFFSET_ALIGNMENT
+        self.0 as usize * HOT_ACCOUNT_ALIGNMENT
     }
 }
 
@@ -422,6 +436,21 @@ impl HotStorageReader {
     }
 }
 
+/// The writer that creates a hot accounts file.
+#[derive(Debug)]
+pub struct HotStorageWriter {
+    storage: TieredStorageFile,
+}
+
+impl HotStorageWriter {
+    /// Create a new HotStorageWriter with the specified path.
+    pub fn new(file_path: impl AsRef<Path>) -> TieredStorageResult<Self> {
+        Ok(Self {
+            storage: TieredStorageFile::new_writable(file_path)?,
+        })
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use {
@@ -491,7 +520,7 @@ pub mod tests {
     #[test]
     fn test_max_hot_account_offset_out_of_bounds() {
         assert_matches!(
-            HotAccountOffset::new(MAX_HOT_ACCOUNT_OFFSET + HOT_ACCOUNT_OFFSET_ALIGNMENT),
+            HotAccountOffset::new(MAX_HOT_ACCOUNT_OFFSET + HOT_ACCOUNT_ALIGNMENT),
             Err(TieredStorageError::OffsetOutOfBounds(_, _))
         );
     }
@@ -499,7 +528,7 @@ pub mod tests {
     #[test]
     fn test_max_hot_account_offset_alignment_error() {
         assert_matches!(
-            HotAccountOffset::new(HOT_ACCOUNT_OFFSET_ALIGNMENT - 1),
+            HotAccountOffset::new(HOT_ACCOUNT_ALIGNMENT - 1),
             Err(TieredStorageError::OffsetAlignmentError(_, _))
         );
     }
@@ -728,7 +757,7 @@ pub mod tests {
             .map(|address| AccountIndexWriterEntry {
                 address,
                 offset: HotAccountOffset::new(
-                    rng.gen_range(0..u32::MAX) as usize * HOT_ACCOUNT_OFFSET_ALIGNMENT,
+                    rng.gen_range(0..u32::MAX) as usize * HOT_ACCOUNT_ALIGNMENT,
                 )
                 .unwrap(),
             })
@@ -1017,5 +1046,19 @@ pub mod tests {
             hot_storage.get_account(IndexOffset(NUM_ACCOUNTS as u32)),
             Ok(None)
         );
+    }
+
+    #[test]
+    fn test_hot_storage_writer_twice_on_same_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir
+            .path()
+            .join("test_hot_storage_writer_twice_on_same_path");
+
+        // Expect the first returns Ok
+        assert_matches!(HotStorageWriter::new(&path), Ok(_));
+        // Expect the second call on the same path returns Err, as the
+        // HotStorageWriter only writes once.
+        assert_matches!(HotStorageWriter::new(&path), Err(_));
     }
 }

@@ -141,7 +141,7 @@ mod tests {
         super::*,
         crate::tiered_storage::{
             file::TieredStorageFile,
-            hot::{HotAccountOffset, HOT_ACCOUNT_OFFSET_ALIGNMENT},
+            hot::{HotAccountOffset, HOT_ACCOUNT_ALIGNMENT},
         },
         memmap2::MmapOptions,
         rand::Rng,
@@ -167,7 +167,7 @@ mod tests {
             .map(|address| AccountIndexWriterEntry {
                 address,
                 offset: HotAccountOffset::new(
-                    rng.gen_range(0..u32::MAX) as usize * HOT_ACCOUNT_OFFSET_ALIGNMENT,
+                    rng.gen_range(0..u32::MAX) as usize * HOT_ACCOUNT_ALIGNMENT,
                 )
                 .unwrap(),
             })
