@@ -16,8 +16,10 @@ pub struct AccountMetaFlags {
     pub has_rent_epoch: bool,
     /// whether the account meta has account hash
     pub has_account_hash: bool,
+    /// whether the account is executable
+    pub executable: bool,
     /// the reserved bits.
-    reserved: B30,
+    reserved: B29,
 }
 
 /// A trait that allows different implementations of the account meta that
@@ -87,6 +89,7 @@ impl AccountMetaFlags {
         let mut flags = AccountMetaFlags::default();
         flags.set_has_rent_epoch(optional_fields.rent_epoch.is_some());
         flags.set_has_account_hash(optional_fields.account_hash.is_some());
+        flags.set_executable(false);
         flags
     }
 }
@@ -174,12 +177,20 @@ pub mod tests {
 
         assert!(flags.has_rent_epoch());
         assert!(!flags.has_account_hash());
+        assert!(!flags.executable());
         verify_flags_serialization(&flags);
 
         flags.set_has_account_hash(true);
 
         assert!(flags.has_rent_epoch());
         assert!(flags.has_account_hash());
+        assert!(!flags.executable());
+        verify_flags_serialization(&flags);
+
+        flags.set_executable(true);
+        assert!(flags.has_rent_epoch());
+        assert!(flags.has_account_hash());
+        assert!(flags.executable());
         verify_flags_serialization(&flags);
 
         // make sure the reserved bits are untouched.
