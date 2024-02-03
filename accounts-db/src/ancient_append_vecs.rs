@@ -968,6 +968,9 @@ pub const fn get_ancient_append_vec_capacity() -> u64 {
 pub fn is_ancient(storage: &AccountsFile) -> bool {
     match storage {
         AccountsFile::AppendVec(storage) => storage.capacity() >= get_ancient_append_vec_capacity(),
+        AccountsFile::TieredStorage(ts) => {
+            ts.file_size().unwrap_or(0) >= get_ancient_append_vec_capacity()
+        }
     }
 }
 
