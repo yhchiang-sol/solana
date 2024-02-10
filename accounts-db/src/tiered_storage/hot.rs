@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! The account meta and related structs for hot accounts.
 
 use {
@@ -23,7 +22,9 @@ use {
     bytemuck::{Pod, Zeroable},
     memmap2::{Mmap, MmapOptions},
     modular_bitfield::prelude::*,
-    solana_sdk::{account::ReadableAccount, pubkey::Pubkey, stake_history::Epoch},
+    solana_sdk::{
+        account::ReadableAccount, pubkey::Pubkey, stake_history::Epoch,
+    },
     std::{borrow::Borrow, fs::OpenOptions, option::Option, path::Path},
 };
 
@@ -96,10 +97,16 @@ struct HotMetaPackedFields {
     owner_offset: B29,
 }
 
+// Ensure there are no implicit padding bytes
+const _: () = assert!(std::mem::size_of::<HotMetaPackedFields>() == 4);
+
 /// The offset to access a hot account.
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Pod, Zeroable)]
 pub struct HotAccountOffset(u32);
+
+// Ensure there are no implicit padding bytes
+const _: () = assert!(std::mem::size_of::<HotAccountOffset>() == 4);
 
 impl AccountOffset for HotAccountOffset {}
 
@@ -142,6 +149,9 @@ pub struct HotAccountMeta {
     /// Stores boolean flags and existence of each optional field.
     flags: AccountMetaFlags,
 }
+
+// Ensure there are no implicit padding bytes
+const _: () = assert!(std::mem::size_of::<HotAccountMeta>() == 8 + 4 + 4);
 
 impl TieredAccountMeta for HotAccountMeta {
     /// Construct a HotAccountMeta instance.
@@ -647,26 +657,21 @@ impl HotStorageWriter {
 pub mod tests {
     use {
         super::*,
-        crate::{
-            account_storage::meta::StoredMeta,
-            tiered_storage::{
-                byte_block::ByteBlockWriter,
-                file::TieredStorageFile,
-                footer::{AccountBlockFormat, AccountMetaFormat, TieredStorageFooter, FOOTER_SIZE},
-                hot::{HotAccountMeta, HotStorageReader},
-                index::{AccountIndexWriterEntry, IndexBlockFormat, IndexOffset},
-                meta::{AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta},
-                owners::{OwnersBlockFormat, OwnersTable},
-            },
+        crate::tiered_storage::{
+            byte_block::ByteBlockWriter,
+            file::TieredStorageFile,
+            footer::{AccountBlockFormat, AccountMetaFormat, TieredStorageFooter, FOOTER_SIZE},
+            hot::{HotAccountMeta, HotStorageReader},
+            index::{AccountIndexWriterEntry, IndexBlockFormat, IndexOffset},
+            meta::{AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta},
+            owners::{OwnersBlockFormat, OwnersTable},
+            test_utils::{create_test_account, verify_test_account},
         },
         assert_matches::assert_matches,
         memoffset::offset_of,
         rand::{seq::SliceRandom, Rng},
         solana_sdk::{
-            account::{Account, AccountSharedData, ReadableAccount},
-            hash::Hash,
-            pubkey::Pubkey,
-            slot_history::Slot,
+            account::ReadableAccount, hash::Hash, pubkey::Pubkey, slot_history::Slot,
             stake_history::Epoch,
         },
         tempfile::TempDir,
@@ -1278,67 +1283,6 @@ pub mod tests {
         assert_matches!(HotStorageWriter::new(&path), Err(_));
     }
 
-    /// Create a test account based on the specified seed.
-    /// The created test account might have default rent_epoch
-    /// and write_version.
-    ///
-    /// When the seed is zero, then a zero-lamport test account will be
-    /// created.
-    fn create_test_account(seed: u64) -> (StoredMeta, AccountSharedData) {
-        let data_byte = seed as u8;
-        let owner_byte = u8::MAX - data_byte;
-        let account = Account {
-            lamports: seed,
-            data: std::iter::repeat(data_byte).take(seed as usize).collect(),
-            // this will allow some test account sharing the same owner.
-            owner: [owner_byte; 32].into(),
-            executable: seed % 2 > 0,
-            rent_epoch: if seed % 3 > 0 {
-                seed
-            } else {
-                RENT_EXEMPT_RENT_EPOCH
-            },
-        };
-
-        let stored_meta = StoredMeta {
-            write_version_obsolete: u64::MAX,
-            pubkey: Pubkey::new_unique(),
-            data_len: seed,
-        };
-        (stored_meta, AccountSharedData::from(account))
-    }
-
-    fn verify_account(
-        stored_meta: &StoredAccountMeta<'_>,
-        account: Option<&impl ReadableAccount>,
-        address: &Pubkey,
-        account_hash: &AccountHash,
-    ) {
-        let (lamports, owner, data, executable, account_hash) = account
-            .map(|acc| {
-                (
-                    acc.lamports(),
-                    acc.owner(),
-                    acc.data(),
-                    acc.executable(),
-                    // only persist rent_epoch for those rent-paying accounts
-                    Some(*account_hash),
-                )
-            })
-            .unwrap_or((0, &OWNER_NO_OWNER, &[], false, None));
-
-        assert_eq!(stored_meta.lamports(), lamports);
-        assert_eq!(stored_meta.data().len(), data.len());
-        assert_eq!(stored_meta.data(), data);
-        assert_eq!(stored_meta.executable(), executable);
-        assert_eq!(stored_meta.owner(), owner);
-        assert_eq!(stored_meta.pubkey(), address);
-        assert_eq!(
-            *stored_meta.hash(),
-            account_hash.unwrap_or(AccountHash(Hash::default()))
-        );
-    }
-
     #[test]
     fn test_write_account_and_index_blocks() {
         let account_data_sizes = &[
@@ -1391,7 +1335,7 @@ pub mod tests {
                 .unwrap();
 
             let (account, address, account_hash, _write_version) = storable_accounts.get(i);
-            verify_account(&stored_meta, account, address, account_hash);
+            verify_test_account(&stored_meta, account, address, account_hash);
 
             assert_eq!(i + 1, next.0 as usize);
         }
@@ -1410,7 +1354,7 @@ pub mod tests {
 
             let (account, address, account_hash, _write_version) =
                 storable_accounts.get(stored_info.offset);
-            verify_account(&stored_meta, account, address, account_hash);
+            verify_test_account(&stored_meta, account, address, account_hash);
         }
 
         // verify get_accounts
@@ -1419,7 +1363,7 @@ pub mod tests {
         // first, we verify everything
         for (i, stored_meta) in accounts.iter().enumerate() {
             let (account, address, account_hash, _write_version) = storable_accounts.get(i);
-            verify_account(stored_meta, account, address, account_hash);
+            verify_test_account(stored_meta, account, address, account_hash);
         }
 
         // second, we verify various initial position

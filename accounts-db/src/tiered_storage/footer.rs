@@ -33,6 +33,9 @@ pub const FOOTER_MAGIC_NUMBER: u64 = 0x502A2AB5; // SOLALABS -> SOLANA LABS
 #[repr(C)]
 pub struct TieredStorageMagicNumber(pub u64);
 
+// Ensure there are no implicit padding bytes
+const _: () = assert!(std::mem::size_of::<TieredStorageMagicNumber>() == 8);
+
 impl Default for TieredStorageMagicNumber {
     fn default() -> Self {
         Self(FOOTER_MAGIC_NUMBER)
@@ -123,12 +126,12 @@ pub struct TieredStorageFooter {
     /// A hash that represents a tiered accounts file for consistency check.
     pub hash: Hash,
 
+    /// The format version of the tiered accounts file.
+    pub format_version: u64,
     // The below fields belong to footer tail.
     // The sum of their sizes should match FOOTER_TAIL_SIZE.
     /// The size of the footer including the magic number.
     pub footer_size: u64,
-    /// The format version of the tiered accounts file.
-    pub format_version: u64,
     // This field is persisted in the storage but not in this struct.
     // The number should match FOOTER_MAGIC_NUMBER.
     // pub magic_number: u64,
@@ -153,8 +156,8 @@ const _: () = assert!(
          + std::mem::size_of::<Pubkey>() // min_account_address
          + std::mem::size_of::<Pubkey>() // max_account_address
          + std::mem::size_of::<Hash>() // hash
-         + std::mem::size_of::<u64>() // footer_size
-         + std::mem::size_of::<u64>(), // format_version
+         + std::mem::size_of::<u64>() // format_version
+         + std::mem::size_of::<u64>(), // footer_size
     "TieredStorageFooter cannot have any padding"
 );
 
@@ -175,8 +178,8 @@ impl Default for TieredStorageFooter {
             hash: Hash::new_unique(),
             min_account_address: Pubkey::default(),
             max_account_address: Pubkey::default(),
-            footer_size: FOOTER_SIZE as u64,
             format_version: FOOTER_FORMAT_VERSION,
+            footer_size: FOOTER_SIZE as u64,
         }
     }
 }
@@ -347,8 +350,8 @@ mod tests {
             hash: Hash::new_unique(),
             min_account_address: Pubkey::default(),
             max_account_address: Pubkey::new_unique(),
-            footer_size: FOOTER_SIZE as u64,
             format_version: FOOTER_FORMAT_VERSION,
+            footer_size: FOOTER_SIZE as u64,
         };
 
         // Persist the expected footer.
@@ -384,8 +387,8 @@ mod tests {
         assert_eq!(offset_of!(TieredStorageFooter, min_account_address), 0x30);
         assert_eq!(offset_of!(TieredStorageFooter, max_account_address), 0x50);
         assert_eq!(offset_of!(TieredStorageFooter, hash), 0x70);
-        assert_eq!(offset_of!(TieredStorageFooter, footer_size), 0x90);
-        assert_eq!(offset_of!(TieredStorageFooter, format_version), 0x98);
+        assert_eq!(offset_of!(TieredStorageFooter, format_version), 0x90);
+        assert_eq!(offset_of!(TieredStorageFooter, footer_size), 0x98);
     }
 
     #[test]
