@@ -47,6 +47,7 @@ pub struct TieredStorageFormat {
     pub account_block_format: AccountBlockFormat,
 }
 
+/// Tiered-storage
 #[derive(Debug)]
 pub struct TieredStorage {
     reader: OnceLock<TieredStorageReader>,
