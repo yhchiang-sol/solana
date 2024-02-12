@@ -54,7 +54,7 @@ use {
             get_ancient_append_vec_capacity, is_ancient, AccountsToStore, StorageSelector,
         },
         append_vec::{
-            aligned_stored_size, AppendVec, APPEND_VEC_MMAPPED_FILES_OPEN, STORE_META_OVERHEAD,
+            aligned_stored_size, APPEND_VEC_MMAPPED_FILES_OPEN, STORE_META_OVERHEAD,
         },
         cache_hash_data::{CacheHashData, CacheHashDataFileReference},
         contains::Contains,
@@ -66,6 +66,7 @@ use {
         rent_collector::RentCollector,
         sorted_storages::SortedStorages,
         storable_accounts::StorableAccounts,
+        tiered_storage::TieredStorage,
         verify_accounts_hash_in_background::VerifyAccountsHashInBackground,
     },
     blake3::traits::digest::Digest,
@@ -898,6 +899,7 @@ pub enum LoadedAccount<'a> {
 impl<'a> LoadedAccount<'a> {
     pub fn loaded_hash(&self) -> AccountHash {
         match self {
+            // TODO(yhchiang): check how it works
             LoadedAccount::Stored(stored_account_meta) => *stored_account_meta.hash(),
             LoadedAccount::Cached(cached_account) => cached_account.hash(),
         }
@@ -1037,10 +1039,11 @@ pub struct AccountStorageEntry {
 }
 
 impl AccountStorageEntry {
-    pub fn new(path: &Path, slot: Slot, id: AppendVecId, file_size: u64) -> Self {
+    pub fn new(path: &Path, slot: Slot, id: AppendVecId, _file_size: u64) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
-        let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+        // let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+        let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
 
         Self {
             id: AtomicAppendVecId::new(id),
@@ -2417,6 +2420,9 @@ impl<'a> AppendVecScan for ScanState<'a> {
         let balance = loaded_account.lamports();
         let mut loaded_hash = loaded_account.loaded_hash();
 
+        // TODO(yhchiang): return Hash::default() in case account hash is None
+        // TODO(yhchiang): for write version, need to update the geysor code to
+        // sort data based on write version.
         let hash_is_missing = loaded_hash == AccountHash(Hash::default());
         if (self.config.check_hash || hash_is_missing)
             && !AccountsDb::is_filler_account_helper(pubkey, self.filler_account_suffix)
@@ -9999,7 +10005,7 @@ pub mod tests {
             accounts_index::{
                 tests::*, AccountSecondaryIndexesIncludeExclude, ReadAccountMapEntry, RefCount,
             },
-            append_vec::{test_utils::TempFile, AppendVecStoredAccountMeta},
+            append_vec::{test_utils::TempFile, AppendVec, AppendVecStoredAccountMeta},
             cache_hash_data::CacheHashDataFile,
             inline_spl_token,
         },
