@@ -894,6 +894,7 @@ pub enum LoadedAccount<'a> {
 impl<'a> LoadedAccount<'a> {
     pub fn loaded_hash(&self) -> AccountHash {
         match self {
+            // TODO(yhchiang): check how it works
             LoadedAccount::Stored(stored_account_meta) => *stored_account_meta.hash(),
             LoadedAccount::Cached(cached_account) => cached_account.hash(),
         }
@@ -2354,6 +2355,9 @@ impl<'a> AppendVecScan for ScanState<'a> {
         let balance = loaded_account.lamports();
         let mut loaded_hash = loaded_account.loaded_hash();
 
+        // TODO(yhchiang): return Hash::default() in case account hash is None
+        // TODO(yhchiang): for write version, need to update the geysor code to
+        // sort data based on write version.
         let hash_is_missing = loaded_hash == AccountHash(Hash::default());
         if self.config.check_hash || hash_is_missing {
             let computed_hash = loaded_account.compute_hash(pubkey);
