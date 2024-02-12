@@ -56,7 +56,7 @@ use {
             get_ancient_append_vec_capacity, is_ancient, AccountsToStore, StorageSelector,
         },
         append_vec::{
-            aligned_stored_size, AppendVec, APPEND_VEC_MMAPPED_FILES_OPEN, STORE_META_OVERHEAD,
+            aligned_stored_size, APPEND_VEC_MMAPPED_FILES_OPEN, STORE_META_OVERHEAD,
         },
         cache_hash_data::{
             CacheHashData, CacheHashDataFileReference, DeletionPolicy as CacheHashDeletionPolicy,
@@ -69,6 +69,7 @@ use {
         read_only_accounts_cache::ReadOnlyAccountsCache,
         sorted_storages::SortedStorages,
         storable_accounts::StorableAccounts,
+        tiered_storage::TieredStorage,
         u64_align, utils,
         verify_accounts_hash_in_background::VerifyAccountsHashInBackground,
     },
@@ -1033,10 +1034,11 @@ pub struct AccountStorageEntry {
 }
 
 impl AccountStorageEntry {
-    pub fn new(path: &Path, slot: Slot, id: AppendVecId, file_size: u64) -> Self {
+    pub fn new(path: &Path, slot: Slot, id: AppendVecId, _file_size: u64) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
-        let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+        // let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+        let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
 
         Self {
             id: AtomicAppendVecId::new(id),
@@ -9766,7 +9768,7 @@ pub mod tests {
                 tests::*, AccountSecondaryIndexesIncludeExclude, ReadAccountMapEntry, RefCount,
             },
             ancient_append_vecs,
-            append_vec::{test_utils::TempFile, AppendVecStoredAccountMeta},
+            append_vec::{test_utils::TempFile, AppendVec, AppendVecStoredAccountMeta},
             cache_hash_data::CacheHashDataFile,
             inline_spl_token,
         },
