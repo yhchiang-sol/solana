@@ -152,15 +152,20 @@ impl AccountsFile {
     /// Return (account metadata, next_index) pair for the account at the
     /// specified `index` if any.  Otherwise return None.   Also return the
     /// index of the next entry.
-    pub fn get_account(&self, index: usize) -> Option<(StoredAccountMeta<'_>, usize)> {
+    pub fn get_account(&self, offset: usize) -> Option<(StoredAccountMeta<'_>, usize)> {
         match self {
-            Self::AppendVec(av) => av.get_account(index),
+            Self::AppendVec(av) => av.get_account(offset),
             Self::TieredHot(ts) => {
+                // TieredHot stores reduced-offset, while the API expects non-reduced one.
+                // So in the input, we need to convert it to reduced_offset, but returns
+                // non-reduced offset in the return value.
                 if let Some(reader) = ts.reader() {
                     return reader
-                        .get_account(IndexOffset(index as u32))
+                        .get_account(IndexOffset(AccountInfo::get_reduced_offset(offset)))
                         .unwrap()
-                        .map(|(metas, index_offset)| (metas, index_offset.0 as usize));
+                        .map(|(metas, index_offset)| {
+                            (metas, AccountInfo::reduced_offset_to_offset(index_offset.0))
+                        });
                 }
                 None
             }
@@ -176,7 +181,10 @@ impl AccountsFile {
             Self::AppendVec(av) => av.account_matches_owners(offset, owners),
             Self::TieredHot(ts) => {
                 if let Some(reader) = ts.reader() {
-                    return reader.account_matches_owners(IndexOffset(offset as u32), owners);
+                    return reader.account_matches_owners(
+                        IndexOffset(AccountInfo::get_reduced_offset(offset)),
+                        owners,
+                    );
                 }
                 Err(MatchAccountOwnerError::UnableToLoad)
             }
@@ -233,7 +241,17 @@ impl AccountsFile {
     ) -> Option<Vec<StoredAccountInfo>> {
         match self {
             Self::AppendVec(av) => av.append_accounts(accounts, skip),
-            Self::TieredHot(ts) => ts.write_accounts(accounts, skip, &HOT_FORMAT).ok(),
+            Self::TieredHot(ts) => ts
+                .write_accounts(accounts, skip, &HOT_FORMAT)
+                .map(|mut infos| {
+                    infos.iter_mut().for_each(|info| {
+                        // A conversion is needed here as TieredStorage uses reduced-offsets
+                        // while AccountsDb uses non-reduced-offsets instead.
+                        info.offset = AccountInfo::reduced_offset_to_offset(info.offset as u32);
+                    });
+                    infos
+                })
+                .ok(),
         }
     }
 }
