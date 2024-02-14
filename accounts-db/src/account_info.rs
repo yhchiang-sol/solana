@@ -22,6 +22,7 @@ pub type StoredSize = u32;
 #[derive(Debug, PartialEq, Eq)]
 pub enum StorageLocation {
     AppendVec(AppendVecId, Offset),
+    Tiered(AccountsFileId, Offset),
     Cached,
 }
 
@@ -37,6 +38,20 @@ impl StorageLocation {
                         false // 1 cached, 1 not
                     }
                     StorageLocation::AppendVec(_, other_offset) => other_offset == offset,
+                    StorageLocation::Tiered(_, _) => {
+                        false
+                    }
+                }
+            }
+            StorageLocation::Tiered(_, offset) => {
+                match other {
+                    StorageLocation::Cached => {
+                        false // 1 cached, 1 not
+                    }
+                    StorageLocation::AppendVec(_, _) => {
+                        false
+                    }
+                    StorageLocation::Tiered(_, other_offset) => other_offset == offset,
                 }
             }
         }
@@ -52,6 +67,20 @@ impl StorageLocation {
                         false // 1 cached, 1 not
                     }
                     StorageLocation::AppendVec(other_store_id, _) => other_store_id == store_id,
+                    StorageLocation::Tiered => {
+                        false
+                    }
+                }
+            }
+            StorageLocation::Tiered(store_id, _) => {
+                match other {
+                    StorageLocation::Cached => {
+                        false // 1 cached, 1 not
+                    }
+                    StorageLocation::AppendVec => {
+                        false
+                    }
+                    StorageLocation::Tiered(other_store_id, _) => other_store_id == store_id,
                 }
             }
         }
@@ -144,6 +173,10 @@ impl AccountInfo {
             StorageLocation::Cached => {
                 packed_offset_and_flags.set_offset_reduced(CACHED_OFFSET);
                 CACHE_VIRTUAL_STORAGE_ID
+            }
+            StorageLocation::Tiered(store_id, offset) => {
+                packed_offset_and_flags.set_offset_reduced(offset);
+                store_id
             }
         };
         packed_offset_and_flags.set_is_zero_lamport(lamports == 0);
