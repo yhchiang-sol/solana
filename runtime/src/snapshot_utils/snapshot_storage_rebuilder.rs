@@ -6,7 +6,7 @@ use {
     },
     crate::serde_snapshot::{
         self, reconstruct_single_storage, remap_and_reconstruct_single_storage,
-        snapshot_storage_lengths_from_fields, SerdeStyle, SerializedAppendVecId,
+        snapshot_storage_lengths_from_fields, SerdeStyle, SerializedAccountsFileId,
     },
     crossbeam_channel::{select, unbounded, Receiver, Sender},
     dashmap::DashMap,
@@ -18,7 +18,7 @@ use {
     regex::Regex,
     solana_accounts_db::{
         account_storage::{AccountStorageMap, AccountStorageReference},
-        accounts_db::{AccountStorageEntry, AccountsDb, AppendVecId, AtomicAppendVecId},
+        accounts_db::{AccountStorageEntry, AccountsDb, AccountsFileId, AtomicAccountsFileId},
         append_vec::AppendVec,
     },
     solana_sdk::clock::Slot,
@@ -58,16 +58,16 @@ pub(crate) struct SnapshotStorageRebuilder {
     /// Number of threads to rebuild with
     num_threads: usize,
     /// Snapshot storage lengths - from the snapshot file
-    snapshot_storage_lengths: HashMap<Slot, HashMap<SerializedAppendVecId, usize>>,
+    snapshot_storage_lengths: HashMap<Slot, HashMap<SerializedAccountsFileId, usize>>,
     /// Container for storing snapshot file paths
     storage_paths: DashMap<Slot, Mutex<Vec<PathBuf>>>,
     /// Container for storing rebuilt snapshot storages
     storage: AccountStorageMap,
     /// Tracks next append_vec_id
-    next_append_vec_id: Arc<AtomicAppendVecId>,
+    next_append_vec_id: Arc<AtomicAccountsFileId>,
     /// Tracker for number of processed slots
     processed_slot_count: AtomicUsize,
-    /// Tracks the number of collisions in AppendVecId
+    /// Tracks the number of collisions in AccountsFileId
     num_collisions: AtomicUsize,
     /// Rebuild from the snapshot files or archives
     snapshot_from: SnapshotFrom,
@@ -78,7 +78,7 @@ impl SnapshotStorageRebuilder {
     pub(crate) fn rebuild_storage(
         file_receiver: Receiver<PathBuf>,
         num_threads: usize,
-        next_append_vec_id: Arc<AtomicAppendVecId>,
+        next_append_vec_id: Arc<AtomicAccountsFileId>,
         snapshot_from: SnapshotFrom,
     ) -> Result<RebuiltSnapshotStorage, SnapshotError> {
         let (snapshot_version_path, snapshot_file_path, append_vec_files) =
@@ -112,7 +112,7 @@ impl SnapshotStorageRebuilder {
     fn new(
         file_receiver: Receiver<PathBuf>,
         num_threads: usize,
-        next_append_vec_id: Arc<AtomicAppendVecId>,
+        next_append_vec_id: Arc<AtomicAccountsFileId>,
         snapshot_storage_lengths: HashMap<Slot, HashMap<usize, usize>>,
         snapshot_from: SnapshotFrom,
     ) -> Self {
@@ -202,7 +202,7 @@ impl SnapshotStorageRebuilder {
     fn spawn_rebuilder_threads(
         file_receiver: Receiver<PathBuf>,
         num_threads: usize,
-        next_append_vec_id: Arc<AtomicAppendVecId>,
+        next_append_vec_id: Arc<AtomicAccountsFileId>,
         snapshot_storage_lengths: HashMap<Slot, HashMap<usize, usize>>,
         append_vec_files: Vec<PathBuf>,
         snapshot_from: SnapshotFrom,
@@ -278,7 +278,7 @@ impl SnapshotStorageRebuilder {
                 // dir.  When loading from a snapshot archive, the max of the appendvec IDs is
                 // updated in remap_append_vec_file(), which is not in the from_dir route.
                 self.next_append_vec_id
-                    .fetch_max((append_vec_id + 1) as AppendVecId, Ordering::Relaxed);
+                    .fetch_max((append_vec_id + 1) as AccountsFileId, Ordering::Relaxed);
             }
             let slot_storage_count = self.insert_storage_file(&slot, path);
             if slot_storage_count == self.snapshot_storage_lengths.get(&slot).unwrap().len() {
@@ -328,13 +328,14 @@ impl SnapshotStorageRebuilder {
                         &slot,
                         path.as_path(),
                         current_len,
-                        old_append_vec_id as AppendVecId,
+                        old_append_vec_id as AccountsFileId,
                     )?,
                 };
 
                 Ok((storage_entry.append_vec_id(), storage_entry))
             })
-            .collect::<Result<HashMap<AppendVecId, Arc<AccountStorageEntry>>, SnapshotError>>()?;
+            .collect::<Result<HashMap<AccountsFileId, Arc<AccountStorageEntry>>, SnapshotError>>(
+            )?;
 
         let storage = if slot_stores.len() > 1 {
             let remapped_append_vec_folder = lock.first().unwrap().parent().unwrap();
@@ -369,10 +370,10 @@ impl SnapshotStorageRebuilder {
     /// increment `next_append_vec_id` until there is no file in `parent_folder` with this id and slot
     /// return the id
     fn get_unique_append_vec_id(
-        next_append_vec_id: &Arc<AtomicAppendVecId>,
+        next_append_vec_id: &Arc<AtomicAccountsFileId>,
         parent_folder: &Path,
         slot: Slot,
-    ) -> AppendVecId {
+    ) -> AccountsFileId {
         loop {
             let remapped_append_vec_id = next_append_vec_id.fetch_add(1, Ordering::AcqRel);
             let remapped_file_name = AppendVec::file_name(slot, remapped_append_vec_id);

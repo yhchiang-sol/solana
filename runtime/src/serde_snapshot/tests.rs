@@ -6,7 +6,7 @@ mod serde_snapshot_tests {
                 newer, reconstruct_accountsdb_from_fields, SerdeStyle, SerializableAccountsDb,
                 SnapshotAccountsDbFields, TypeContext,
             },
-            snapshot_utils::{get_storages_to_serialize, StorageAndNextAppendVecId},
+            snapshot_utils::{get_storages_to_serialize, StorageAndNextAccountsFileId},
         },
         bincode::{serialize_into, Error},
         log::info,
@@ -16,7 +16,7 @@ mod serde_snapshot_tests {
             accounts::Accounts,
             accounts_db::{
                 get_temp_accounts_paths, test_utils::create_test_accounts, AccountShrinkThreshold,
-                AccountStorageEntry, AccountsDb, AtomicAppendVecId,
+                AccountStorageEntry, AccountsDb, AtomicAccountsFileId,
                 VerifyAccountsHashAndLamportsConfig,
             },
             accounts_file::{AccountsFile, AccountsFileError},
@@ -53,7 +53,7 @@ mod serde_snapshot_tests {
     fn context_accountsdb_from_stream<'a, C, R>(
         stream: &mut BufReader<R>,
         account_paths: &[PathBuf],
-        storage_and_next_append_vec_id: StorageAndNextAppendVecId,
+        storage_and_next_append_vec_id: StorageAndNextAccountsFileId,
     ) -> Result<AccountsDb, Error>
     where
         C: TypeContext<'a>,
@@ -91,7 +91,7 @@ mod serde_snapshot_tests {
         serde_style: SerdeStyle,
         stream: &mut BufReader<R>,
         account_paths: &[PathBuf],
-        storage_and_next_append_vec_id: StorageAndNextAppendVecId,
+        storage_and_next_append_vec_id: StorageAndNextAccountsFileId,
     ) -> Result<AccountsDb, Error>
     where
         R: Read,
@@ -132,7 +132,7 @@ mod serde_snapshot_tests {
     fn copy_append_vecs<P: AsRef<Path>>(
         accounts_db: &AccountsDb,
         output_dir: P,
-    ) -> Result<StorageAndNextAppendVecId, AccountsFileError> {
+    ) -> Result<StorageAndNextAccountsFileId, AccountsFileError> {
         let storage_entries = accounts_db.get_snapshot_storages(RangeFull).0;
         let storage: AccountStorageMap = AccountStorageMap::with_capacity(storage_entries.len());
         let mut next_append_vec_id = 0;
@@ -163,9 +163,9 @@ mod serde_snapshot_tests {
             );
         }
 
-        Ok(StorageAndNextAppendVecId {
+        Ok(StorageAndNextAccountsFileId {
             storage,
-            next_append_vec_id: AtomicAppendVecId::new(next_append_vec_id + 1),
+            next_append_vec_id: AtomicAccountsFileId::new(next_append_vec_id + 1),
         })
     }
 

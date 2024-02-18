@@ -6,7 +6,7 @@ use {
         runtime_config::RuntimeConfig,
         serde_snapshot::storage::SerializableAccountStorageEntry,
         snapshot_utils::{
-            self, SnapshotError, StorageAndNextAppendVecId, BANK_SNAPSHOT_PRE_FILENAME_EXTENSION,
+            self, SnapshotError, StorageAndNextAccountsFileId, BANK_SNAPSHOT_PRE_FILENAME_EXTENSION,
         },
         stakes::Stakes,
     },
@@ -17,8 +17,8 @@ use {
         account_storage::meta::StoredMetaWriteVersion,
         accounts::Accounts,
         accounts_db::{
-            AccountShrinkThreshold, AccountStorageEntry, AccountsDb, AccountsDbConfig, AppendVecId,
-            AtomicAppendVecId, BankHashStats, IndexGenerationInfo,
+            AccountShrinkThreshold, AccountStorageEntry, AccountsDb, AccountsDbConfig,
+            AccountsFileId, AtomicAccountsFileId, BankHashStats, IndexGenerationInfo,
         },
         accounts_file::AccountsFile,
         accounts_hash::AccountsHash,
@@ -63,7 +63,7 @@ pub(crate) use {
     solana_accounts_db::accounts_hash::{
         SerdeAccountsDeltaHash, SerdeAccountsHash, SerdeIncrementalAccountsHash,
     },
-    storage::SerializedAppendVecId,
+    storage::SerializedAccountsFileId,
 };
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -285,7 +285,7 @@ pub(crate) fn compare_two_serialized_banks(
 /// Get snapshot storage lengths from accounts_db_fields
 pub(crate) fn snapshot_storage_lengths_from_fields(
     accounts_db_fields: &AccountsDbFields<SerializableAccountStorageEntry>,
-) -> HashMap<Slot, HashMap<SerializedAppendVecId, usize>> {
+) -> HashMap<Slot, HashMap<SerializedAccountsFileId, usize>> {
     let AccountsDbFields(snapshot_storage, ..) = &accounts_db_fields;
     snapshot_storage
         .iter()
@@ -352,7 +352,7 @@ pub(crate) fn bank_from_streams<R>(
     serde_style: SerdeStyle,
     snapshot_streams: &mut SnapshotStreams<R>,
     account_paths: &[PathBuf],
-    storage_and_next_append_vec_id: StorageAndNextAppendVecId,
+    storage_and_next_append_vec_id: StorageAndNextAccountsFileId,
     genesis_config: &GenesisConfig,
     runtime_config: &RuntimeConfig,
     debug_keys: Option<Arc<HashSet<Pubkey>>>,
@@ -581,7 +581,7 @@ fn reconstruct_bank_from_fields<E>(
     genesis_config: &GenesisConfig,
     runtime_config: &RuntimeConfig,
     account_paths: &[PathBuf],
-    storage_and_next_append_vec_id: StorageAndNextAppendVecId,
+    storage_and_next_append_vec_id: StorageAndNextAccountsFileId,
     debug_keys: Option<Arc<HashSet<Pubkey>>>,
     additional_builtins: Option<&[BuiltinPrototype]>,
     account_secondary_indexes: AccountSecondaryIndexes,
@@ -645,7 +645,7 @@ pub(crate) fn reconstruct_single_storage(
     slot: &Slot,
     append_vec_path: &Path,
     current_len: usize,
-    append_vec_id: AppendVecId,
+    append_vec_id: AccountsFileId,
 ) -> Result<Arc<AccountStorageEntry>, SnapshotError> {
     let (accounts_file, num_accounts) = AccountsFile::new_from_file(append_vec_path, current_len)?;
     Ok(Arc::new(AccountStorageEntry::new_existing(
@@ -658,11 +658,11 @@ pub(crate) fn reconstruct_single_storage(
 
 fn remap_append_vec_file(
     slot: Slot,
-    old_append_vec_id: SerializedAppendVecId,
+    old_append_vec_id: SerializedAccountsFileId,
     append_vec_path: &Path,
-    next_append_vec_id: &AtomicAppendVecId,
+    next_append_vec_id: &AtomicAccountsFileId,
     num_collisions: &AtomicUsize,
-) -> io::Result<(AppendVecId, PathBuf)> {
+) -> io::Result<(AccountsFileId, PathBuf)> {
     // Remap the AppendVec ID to handle any duplicate IDs that may previously existed
     // due to full snapshots and incremental snapshots generated from different nodes
     let (remapped_append_vec_id, remapped_append_vec_path) = loop {
@@ -677,7 +677,7 @@ fn remap_append_vec_file(
         //    rename the file to this new path.
         //    **DEVELOPER NOTE:**  Keep this check last so that it can short-circuit if
         //    possible.
-        if old_append_vec_id == remapped_append_vec_id as SerializedAppendVecId
+        if old_append_vec_id == remapped_append_vec_id as SerializedAccountsFileId
             || std::fs::metadata(&remapped_append_vec_path).is_err()
         {
             break (remapped_append_vec_id, remapped_append_vec_path);
@@ -688,7 +688,7 @@ fn remap_append_vec_file(
         num_collisions.fetch_add(1, Ordering::Relaxed);
     };
     // Only rename the file if the new ID is actually different from the original.
-    if old_append_vec_id != remapped_append_vec_id as SerializedAppendVecId {
+    if old_append_vec_id != remapped_append_vec_id as SerializedAccountsFileId {
         std::fs::rename(append_vec_path, &remapped_append_vec_path)?;
     }
 
@@ -697,10 +697,10 @@ fn remap_append_vec_file(
 
 pub(crate) fn remap_and_reconstruct_single_storage(
     slot: Slot,
-    old_append_vec_id: SerializedAppendVecId,
+    old_append_vec_id: SerializedAccountsFileId,
     current_len: usize,
     append_vec_path: &Path,
-    next_append_vec_id: &AtomicAppendVecId,
+    next_append_vec_id: &AtomicAccountsFileId,
     num_collisions: &AtomicUsize,
 ) -> Result<Arc<AccountStorageEntry>, SnapshotError> {
     let (remapped_append_vec_id, remapped_append_vec_path) = remap_append_vec_file(
@@ -729,7 +729,7 @@ struct ReconstructedAccountsDbInfo {
 fn reconstruct_accountsdb_from_fields<E>(
     snapshot_accounts_db_fields: SnapshotAccountsDbFields<E>,
     account_paths: &[PathBuf],
-    storage_and_next_append_vec_id: StorageAndNextAppendVecId,
+    storage_and_next_append_vec_id: StorageAndNextAccountsFileId,
     genesis_config: &GenesisConfig,
     account_secondary_indexes: AccountSecondaryIndexes,
     limit_load_slot_count_from_snapshot: Option<usize>,
@@ -876,7 +876,7 @@ where
             .unwrap_or_else(|err| panic!("Failed to create directory {}: {}", path.display(), err));
     }
 
-    let StorageAndNextAppendVecId {
+    let StorageAndNextAccountsFileId {
         storage,
         next_append_vec_id,
     } = storage_and_next_append_vec_id;
@@ -889,7 +889,7 @@ where
     let next_append_vec_id = next_append_vec_id.load(Ordering::Acquire);
     let max_append_vec_id = next_append_vec_id - 1;
     assert!(
-        max_append_vec_id <= AppendVecId::MAX / 2,
+        max_append_vec_id <= AccountsFileId::MAX / 2,
         "Storage id {max_append_vec_id} larger than allowed max"
     );
 
