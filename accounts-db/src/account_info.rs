@@ -1,4 +1,4 @@
-//! AccountInfo represents a reference to AccountSharedData in either an AppendVec or the write cache.
+//! AccountInfo represents a reference to AccountSharedData in either disk or the write cache.
 //! AccountInfo is not persisted anywhere between program runs.
 //! AccountInfo is purely runtime state.
 //! Note that AccountInfo is saved to disk buckets during runtime, but disk buckets are recreated at startup.
@@ -21,7 +21,7 @@ pub type StoredSize = u32;
 /// specify where account data is located
 #[derive(Debug, PartialEq, Eq)]
 pub enum StorageLocation {
-    AppendVec(AccountsFileId, Offset),
+    Disk(AccountsFileId, Offset),
     Cached,
 }
 
@@ -31,12 +31,12 @@ impl StorageLocation {
             StorageLocation::Cached => {
                 matches!(other, StorageLocation::Cached) // technically, 2 cached entries match in offset
             }
-            StorageLocation::AppendVec(_, offset) => {
+            StorageLocation::Disk(_, offset) => {
                 match other {
                     StorageLocation::Cached => {
                         false // 1 cached, 1 not
                     }
-                    StorageLocation::AppendVec(_, other_offset) => other_offset == offset,
+                    StorageLocation::Disk(_, other_offset) => other_offset == offset,
                 }
             }
         }
@@ -46,12 +46,12 @@ impl StorageLocation {
             StorageLocation::Cached => {
                 matches!(other, StorageLocation::Cached) // 2 cached entries are same store id
             }
-            StorageLocation::AppendVec(store_id, _) => {
+            StorageLocation::Disk(store_id, _) => {
                 match other {
                     StorageLocation::Cached => {
                         false // 1 cached, 1 not
                     }
-                    StorageLocation::AppendVec(other_store_id, _) => other_store_id == store_id,
+                    StorageLocation::Disk(other_store_id, _) => other_store_id == store_id,
                 }
             }
         }
@@ -127,7 +127,7 @@ impl AccountInfo {
     pub fn new(storage_location: StorageLocation, lamports: u64) -> Self {
         let mut packed_offset_and_flags = PackedOffsetAndFlags::default();
         let store_id = match storage_location {
-            StorageLocation::AppendVec(store_id, offset) => {
+            StorageLocation::Disk(store_id, offset) => {
                 let reduced_offset = Self::get_reduced_offset(offset);
                 assert_ne!(
                     CACHED_OFFSET, reduced_offset,
@@ -182,7 +182,7 @@ impl AccountInfo {
         if self.is_cached() {
             StorageLocation::Cached
         } else {
-            StorageLocation::AppendVec(self.store_id, self.offset())
+            StorageLocation::Disk(self.store_id, self.offset())
         }
     }
 }
@@ -202,7 +202,7 @@ mod test {
             ALIGN_BOUNDARY_OFFSET,
             4 * ALIGN_BOUNDARY_OFFSET,
         ] {
-            let info = AccountInfo::new(StorageLocation::AppendVec(0, offset), 0);
+            let info = AccountInfo::new(StorageLocation::Disk(0, offset), 0);
             assert!(info.offset() == offset);
         }
     }
@@ -211,13 +211,13 @@ mod test {
     #[should_panic(expected = "illegal offset")]
     fn test_illegal_offset() {
         let offset = (MAXIMUM_APPEND_VEC_FILE_SIZE - (ALIGN_BOUNDARY_OFFSET as u64)) as Offset;
-        AccountInfo::new(StorageLocation::AppendVec(0, offset), 0);
+        AccountInfo::new(StorageLocation::Disk(0, offset), 0);
     }
 
     #[test]
     #[should_panic(expected = "illegal offset")]
     fn test_alignment() {
         let offset = 1; // not aligned
-        AccountInfo::new(StorageLocation::AppendVec(0, offset), 0);
+        AccountInfo::new(StorageLocation::Disk(0, offset), 0);
     }
 }

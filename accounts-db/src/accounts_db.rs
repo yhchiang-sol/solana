@@ -5640,7 +5640,7 @@ impl AccountsDb {
                 let maybe_cached_account = self.accounts_cache.load(slot, pubkey).map(Cow::Owned);
                 LoadedAccountAccessor::Cached(maybe_cached_account)
             }
-            StorageLocation::AppendVec(store_id, offset) => {
+            StorageLocation::Disk(store_id, offset) => {
                 let maybe_storage_entry = self
                     .storage
                     .get_account_storage_entry(slot, *store_id)
@@ -6334,7 +6334,7 @@ impl AccountsDb {
                 storage.add_account(stored_account_info.size);
 
                 infos.push(AccountInfo::new(
-                    StorageLocation::AppendVec(store_id, stored_account_info.offset),
+                    StorageLocation::Disk(store_id, stored_account_info.offset),
                     accounts_and_meta_to_store
                         .account(i)
                         .map(|account| account.lamports())
@@ -9062,7 +9062,7 @@ impl AccountsDb {
             (
                 *pubkey,
                 AccountInfo::new(
-                    StorageLocation::AppendVec(store_id, stored_account.offset()), // will never be cached
+                    StorageLocation::Disk(store_id, stored_account.offset()), // will never be cached
                     stored_account.lamports(),
                 ),
             )
@@ -9316,10 +9316,7 @@ impl AccountsDb {
                                     if slot2 == slot {
                                         count += 1;
                                         let ai = AccountInfo::new(
-                                            StorageLocation::AppendVec(
-                                                store_id,
-                                                account_info.offset(),
-                                            ), // will never be cached
+                                            StorageLocation::Disk(store_id, account_info.offset()), // will never be cached
                                             account_info.lamports(),
                                         );
                                         assert_eq!(&ai, account_info2);
@@ -11151,7 +11148,7 @@ pub mod tests {
 
         if let Some(index) = add_to_index {
             let account_info = AccountInfo::new(
-                StorageLocation::AppendVec(storage.append_vec_id(), stored_accounts_info[0].offset),
+                StorageLocation::Disk(storage.append_vec_id(), stored_accounts_info[0].offset),
                 account.lamports(),
             );
             index.upsert(
@@ -13560,10 +13557,10 @@ pub mod tests {
         let key0 = Pubkey::new_from_array([0u8; 32]);
         let key1 = Pubkey::new_from_array([1u8; 32]);
         let key2 = Pubkey::new_from_array([2u8; 32]);
-        let info0 = AccountInfo::new(StorageLocation::AppendVec(0, 0), 0);
-        let info1 = AccountInfo::new(StorageLocation::AppendVec(1, 0), 0);
-        let info2 = AccountInfo::new(StorageLocation::AppendVec(2, 0), 0);
-        let info3 = AccountInfo::new(StorageLocation::AppendVec(3, 0), 0);
+        let info0 = AccountInfo::new(StorageLocation::Disk(0, 0), 0);
+        let info1 = AccountInfo::new(StorageLocation::Disk(1, 0), 0);
+        let info2 = AccountInfo::new(StorageLocation::Disk(2, 0), 0);
+        let info3 = AccountInfo::new(StorageLocation::Disk(3, 0), 0);
         let mut reclaims = vec![];
         accounts_index.upsert(
             0,
@@ -16041,7 +16038,7 @@ pub mod tests {
         }
 
         let do_test = |test_params: TestParameters| {
-            let account_info = AccountInfo::new(StorageLocation::AppendVec(42, 128), 0);
+            let account_info = AccountInfo::new(StorageLocation::Disk(42, 128), 0);
             let pubkey = solana_sdk::pubkey::new_rand();
             let mut key_set = HashSet::default();
             key_set.insert(pubkey);
@@ -17725,7 +17722,7 @@ pub mod tests {
             if let Some(storage) = db.get_storage_for_slot(slot) {
                 storage.accounts.account_iter().for_each(|account| {
                     let info = AccountInfo::new(
-                        StorageLocation::AppendVec(storage.append_vec_id(), account.offset()),
+                        StorageLocation::Disk(storage.append_vec_id(), account.offset()),
                         account.lamports(),
                     );
                     db.accounts_index.upsert(
