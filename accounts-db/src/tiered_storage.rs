@@ -80,7 +80,8 @@ impl TieredStorage {
     ///
     /// Note that the actual file will not be created until write_accounts
     /// is called.
-    pub fn new_writable(path: impl Into<PathBuf>) -> Self {
+    pub fn new_writable(path: impl Into<PathBuf> + std::fmt::Debug) -> Self {
+        info!("[YH] TieredStorage::new_writable({:?})", path);
         Self {
             reader: OnceLock::<TieredStorageReader>::new(),
             already_written: false.into(),
@@ -90,10 +91,12 @@ impl TieredStorage {
 
     /// Creates a new read-only instance of TieredStorage from the
     /// specified path.
-    pub fn new_readonly(path: impl Into<PathBuf>) -> TieredStorageResult<Self> {
+    pub fn new_readonly(path: impl Into<PathBuf> + std::fmt::Debug) -> TieredStorageResult<Self> {
         let path = path.into();
+        let reader = TieredStorageReader::new_from_path(&path).map(OnceLock::from)?;
+        info!("[YH] TieredStorage::new_readonly({:?})", path);
         Ok(Self {
-            reader: TieredStorageReader::new_from_path(&path).map(OnceLock::from)?,
+            reader,
             already_written: true.into(),
             path,
         })

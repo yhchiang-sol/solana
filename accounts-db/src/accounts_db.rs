@@ -69,6 +69,7 @@ use {
         read_only_accounts_cache::ReadOnlyAccountsCache,
         sorted_storages::SortedStorages,
         storable_accounts::StorableAccounts,
+        tiered_storage::TieredStorage,
         u64_align, utils,
         verify_accounts_hash_in_background::VerifyAccountsHashInBackground,
     },
@@ -1045,7 +1046,8 @@ impl AccountStorageEntry {
     pub fn new(path: &Path, slot: Slot, id: AccountsFileId, file_size: u64) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
-        let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+        // let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true /* create new */, file_size as usize));
+        let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
 
         Self {
             id: AtomicAccountsFileId::new(id),
@@ -1060,12 +1062,13 @@ impl AccountStorageEntry {
     pub fn new_for_shrink(path: &Path, slot: Slot, id: AccountsFileId, file_size: u64) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
+        /*
         let accounts = AccountsFile::AppendVec(AppendVec::new(
             &path,
             true, /* create new */
             file_size as usize,
-        ));
-        // let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
+        ));*/
+        let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
 
         Self {
             id: AtomicAccountsFileId::new(id),
@@ -2642,7 +2645,12 @@ impl AccountsDb {
         AccountStorageEntry::new(path, slot, self.next_id(), size)
     }
 
-    fn new_storage_entry_for_shrink(&self, slot: Slot, path: &Path, size: u64) -> AccountStorageEntry {
+    fn new_storage_entry_for_shrink(
+        &self,
+        slot: Slot,
+        path: &Path,
+        size: u64,
+    ) -> AccountStorageEntry {
         AccountStorageEntry::new_for_shrink(path, slot, self.next_id(), size)
     }
 
@@ -9843,7 +9851,7 @@ pub mod tests {
                 tests::*, AccountSecondaryIndexesIncludeExclude, ReadAccountMapEntry, RefCount,
             },
             ancient_append_vecs,
-            append_vec::{test_utils::TempFile, AppendVecStoredAccountMeta},
+            append_vec::{test_utils::TempFile, AppendVec, AppendVecStoredAccountMeta},
             cache_hash_data::CacheHashDataFile,
             inline_spl_token,
         },
