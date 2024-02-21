@@ -53,7 +53,9 @@ use {
         ancient_append_vecs::{
             get_ancient_append_vec_capacity, is_ancient, AccountsToStore, StorageSelector,
         },
-        append_vec::{aligned_stored_size, APPEND_VEC_MMAPPED_FILES_OPEN, STORE_META_OVERHEAD},
+        append_vec::{
+            aligned_stored_size, AppendVec, APPEND_VEC_MMAPPED_FILES_OPEN, STORE_META_OVERHEAD,
+        },
         cache_hash_data::{CacheHashData, CacheHashDataFileReference},
         contains::Contains,
         epoch_accounts_hash::EpochAccountsHashManager,
@@ -1040,7 +1042,7 @@ impl AccountStorageEntry {
     pub fn new(path: &Path, slot: Slot, id: AccountsFileId, _file_size: u64) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
-        // let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+        // let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true /* create new */, file_size as usize));
         let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
 
         Self {
@@ -2771,7 +2773,12 @@ impl AccountsDb {
         AccountStorageEntry::new(path, slot, self.next_id(), size)
     }
 
-    fn new_storage_entry_for_shrink(&self, slot: Slot, path: &Path, size: u64) -> AccountStorageEntry {
+    fn new_storage_entry_for_shrink(
+        &self,
+        slot: Slot,
+        path: &Path,
+        size: u64,
+    ) -> AccountStorageEntry {
         AccountStorageEntry::new_for_shrink(path, slot, self.next_id(), size)
     }
 
@@ -5693,6 +5700,7 @@ impl AccountsDb {
         min_size: u64,
         max_size: u64,
     ) -> Option<Arc<AccountStorageEntry>> {
+        return None;
         let mut max = 0;
         let mut min = std::u64::MAX;
         let mut avail = 0;
