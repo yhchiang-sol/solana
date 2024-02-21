@@ -1,5 +1,6 @@
 use {
     crate::{
+        account_info::AccountInfo,
         account_storage::meta::{
             StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo, StoredAccountMeta,
         },

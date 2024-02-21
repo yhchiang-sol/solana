@@ -23,6 +23,7 @@ use {
     footer::{AccountBlockFormat, AccountMetaFormat},
     hot::{HotStorageWriter, HOT_FORMAT},
     index::IndexBlockFormat,
+    log::*,
     owners::OwnersBlockFormat,
     readable::TieredStorageReader,
     solana_sdk::account::ReadableAccount,
@@ -64,10 +65,11 @@ pub struct TieredStorage {
 impl Drop for TieredStorage {
     fn drop(&mut self) {
         if let Err(err) = fs::remove_file(&self.path) {
+            /*
             panic!(
                 "TieredStorage failed to remove backing storage file '{}': {err}",
                 self.path.display(),
-            );
+            );*/
         }
     }
 }
@@ -78,7 +80,8 @@ impl TieredStorage {
     ///
     /// Note that the actual file will not be created until write_accounts
     /// is called.
-    pub fn new_writable(path: impl Into<PathBuf>) -> Self {
+    pub fn new_writable(path: impl Into<PathBuf> + std::fmt::Debug) -> Self {
+        info!("[YH] TieredStorage::new_writable({:?})", path);
         Self {
             reader: OnceLock::<TieredStorageReader>::new(),
             already_written: false.into(),
@@ -88,10 +91,12 @@ impl TieredStorage {
 
     /// Creates a new read-only instance of TieredStorage from the
     /// specified path.
-    pub fn new_readonly(path: impl Into<PathBuf>) -> TieredStorageResult<Self> {
+    pub fn new_readonly(path: impl Into<PathBuf> + std::fmt::Debug) -> TieredStorageResult<Self> {
         let path = path.into();
+        let reader = TieredStorageReader::new_from_path(&path).map(OnceLock::from)?;
+        info!("[YH] TieredStorage::new_readonly({:?})", path);
         Ok(Self {
-            reader: TieredStorageReader::new_from_path(&path).map(OnceLock::from)?,
+            reader,
             already_written: true.into(),
             path,
         })

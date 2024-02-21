@@ -3,6 +3,7 @@ use {
         account_storage::meta::StoredAccountMeta,
         accounts_file::MatchAccountOwnerError,
         accounts_hash::AccountHash,
+        rent_collector::RENT_EXEMPT_RENT_EPOCH,
         tiered_storage::{
             footer::{AccountMetaFormat, TieredStorageFooter},
             hot::HotStorageReader,

@@ -66,6 +66,7 @@ use {
         rent_collector::RentCollector,
         sorted_storages::SortedStorages,
         storable_accounts::StorableAccounts,
+        tiered_storage::TieredStorage,
         verify_accounts_hash_in_background::VerifyAccountsHashInBackground,
     },
     blake3::traits::digest::Digest,
@@ -1040,7 +1041,28 @@ impl AccountStorageEntry {
     pub fn new(path: &Path, slot: Slot, id: AppendVecId, file_size: u64) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
-        let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+        // let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true /* create new */, file_size as usize));
+        let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
+
+        Self {
+            id: AtomicAppendVecId::new(id),
+            slot: AtomicU64::new(slot),
+            accounts,
+            count_and_status: RwLock::new((0, AccountStorageStatus::Available)),
+            approx_store_count: AtomicUsize::new(0),
+            alive_bytes: AtomicUsize::new(0),
+        }
+    }
+
+    pub fn new_for_shrink(path: &Path, slot: Slot, id: AppendVecId, file_size: u64) -> Self {
+        let tail = AccountsFile::file_name(slot, id);
+        let path = Path::new(path).join(tail);
+        let accounts = AccountsFile::AppendVec(AppendVec::new(
+            &path,
+            true, /* create new */
+            file_size as usize,
+        ));
+        // let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
 
         Self {
             id: AtomicAppendVecId::new(id),
@@ -2740,6 +2762,15 @@ impl AccountsDb {
 
     fn new_storage_entry(&self, slot: Slot, path: &Path, size: u64) -> AccountStorageEntry {
         AccountStorageEntry::new(path, slot, self.next_id(), size)
+    }
+
+    fn new_storage_entry_for_shrink(
+        &self,
+        slot: Slot,
+        path: &Path,
+        size: u64,
+    ) -> AccountStorageEntry {
+        AccountStorageEntry::new_for_shrink(path, slot, self.next_id(), size)
     }
 
     pub fn expected_cluster_type(&self) -> ClusterType {
