@@ -64,10 +64,11 @@ pub struct TieredStorage {
 impl Drop for TieredStorage {
     fn drop(&mut self) {
         if let Err(err) = fs::remove_file(&self.path) {
-            panic!(
-                "TieredStorage failed to remove backing storage file '{}': {err}",
-                self.path.display(),
-            );
+            // promote this to panic soon
+            // panic!(
+            //     "TieredStorage failed to remove backing storage file '{}': {err}",
+            //     self.path.display(),
+            // );
         }
     }
 }
