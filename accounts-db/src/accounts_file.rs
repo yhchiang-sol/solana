@@ -212,7 +212,9 @@ impl AccountsFile {
                 if let Some(reader) = ts.reader() {
                     // A conversion is needed here as TieredStorage uses reduced-offsets
                     // while AccountsDb uses non-reduced-offsets instead.
-                    return reader.accounts(IndexOffset(AccountInfo::get_reduced_offset(offset))).unwrap();
+                    return reader
+                        .accounts(IndexOffset(AccountInfo::get_reduced_offset(offset)))
+                        .unwrap();
                 }
                 vec![]
             }

@@ -3,7 +3,7 @@ use {
         accounts_hash::AccountHash,
         append_vec::AppendVecStoredAccountMeta,
         storable_accounts::StorableAccounts,
-        tiered_storage::{hot::HotAccountMeta, readable::TieredReadableAccount},
+        tiered_storage::{hot::HotAccountMeta, index, readable::TieredReadableAccount},
     },
     solana_sdk::{account::ReadableAccount, hash::Hash, pubkey::Pubkey, stake_history::Epoch},
     std::{borrow::Borrow, marker::PhantomData},
@@ -135,7 +135,12 @@ impl<'storage> StoredAccountMeta<'storage> {
     pub fn stored_size(&self) -> usize {
         match self {
             Self::AppendVec(av) => av.stored_size(),
-            Self::Hot(_) => unimplemented!(),
+            Self::Hot(hot) => {
+                hot.account_block.len()
+                    + std::mem::size_of::<HotAccountMeta>()
+                    + std::mem::size_of::<Pubkey>()
+                    + std::mem::size_of::<index::IndexOffset>()
+            }
         }
     }
 
