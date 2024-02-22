@@ -1053,6 +1053,26 @@ impl AccountStorageEntry {
         }
     }
 
+    pub fn new_for_shrink(path: &Path, slot: Slot, id: AccountsFileId, file_size: u64) -> Self {
+        let tail = AccountsFile::file_name(slot, id);
+        let path = Path::new(path).join(tail);
+        let accounts = AccountsFile::AppendVec(AppendVec::new(
+            &path,
+            true, /* create new */
+            file_size as usize,
+        ));
+        // let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
+
+        Self {
+            id: AtomicAccountsFileId::new(id),
+            slot: AtomicU64::new(slot),
+            accounts,
+            count_and_status: SeqLock::new((0, AccountStorageStatus::Available)),
+            approx_store_count: AtomicUsize::new(0),
+            alive_bytes: AtomicUsize::new(0),
+        }
+    }
+
     pub fn new_existing(
         slot: Slot,
         id: AccountsFileId,
@@ -2747,6 +2767,10 @@ impl AccountsDb {
 
     fn new_storage_entry(&self, slot: Slot, path: &Path, size: u64) -> AccountStorageEntry {
         AccountStorageEntry::new(path, slot, self.next_id(), size)
+    }
+
+    fn new_storage_entry_for_shrink(&self, slot: Slot, path: &Path, size: u64) -> AccountStorageEntry {
+        AccountStorageEntry::new_for_shrink(path, slot, self.next_id(), size)
     }
 
     pub fn expected_cluster_type(&self) -> ClusterType {
@@ -5778,7 +5802,11 @@ impl AccountsDb {
             .create_store_count
             .fetch_add(1, Ordering::Relaxed);
         let path_index = thread_rng().gen_range(0..paths.len());
-        let store = Arc::new(self.new_storage_entry(slot, Path::new(&paths[path_index]), size));
+        let store = if from != "shrink" {
+            Arc::new(self.new_storage_entry(slot, Path::new(&paths[path_index]), size))
+        } else {
+            Arc::new(self.new_storage_entry_for_shrink(slot, Path::new(&paths[path_index]), size))
+        };
 
         debug!(
             "creating store: {} slot: {} len: {} size: {} from: {} path: {:?}",
