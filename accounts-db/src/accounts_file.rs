@@ -201,7 +201,11 @@ impl AccountsFile {
             Self::AppendVec(av) => av.accounts(offset),
             Self::TieredHot(ts) => {
                 if let Some(reader) = ts.reader() {
-                    return reader.accounts(IndexOffset(offset as u32)).unwrap();
+                    // A conversion is needed here as TieredStorage uses reduced-offsets
+                    // while AccountsDb uses non-reduced-offsets instead.
+                    return reader
+                        .accounts(IndexOffset(AccountInfo::get_reduced_offset(offset)))
+                        .unwrap();
                 }
                 vec![]
             }
