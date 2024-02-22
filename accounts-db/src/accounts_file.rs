@@ -4,6 +4,7 @@ use {
             StorableAccountsWithHashesAndWriteVersions, StoredAccountInfo, StoredAccountMeta,
         },
         accounts_hash::AccountHash,
+        account_info::AccountInfo,
         append_vec::{AppendVec, AppendVecError},
         storable_accounts::StorableAccounts,
         tiered_storage::{

@@ -156,7 +156,7 @@ impl AccountInfo {
         }
     }
 
-    fn get_reduced_offset(offset: usize) -> OffsetReduced {
+    pub fn get_reduced_offset(offset: usize) -> OffsetReduced {
         (offset / ALIGN_BOUNDARY_OFFSET) as OffsetReduced
     }
 
