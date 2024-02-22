@@ -11,7 +11,10 @@ use {
             TieredStorageResult,
         },
     },
-    solana_sdk::{account::ReadableAccount, pubkey::Pubkey, stake_history::Epoch},
+    solana_sdk::{
+        account::ReadableAccount, pubkey::Pubkey, rent_collector::RENT_EXEMPT_RENT_EPOCH,
+        stake_history::Epoch,
+    },
     std::path::Path,
 };
 
@@ -77,7 +80,11 @@ impl<'accounts_file, M: TieredAccountMeta> ReadableAccount
     fn rent_epoch(&self) -> Epoch {
         self.meta
             .rent_epoch(self.account_block)
-            .unwrap_or(Epoch::MAX)
+            .unwrap_or(if self.lamports() != 0 {
+                RENT_EXEMPT_RENT_EPOCH
+            } else {
+                0
+            })
     }
 
     /// Returns the data associated to this account.
