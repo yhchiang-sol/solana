@@ -18,7 +18,7 @@ use {
             get_snapshot_file_name, get_storages_to_serialize, hard_link_storages_to_snapshot,
             rebuild_storages_from_snapshot_dir, serialize_snapshot_data_file,
             verify_and_unarchive_snapshots, verify_unpacked_snapshots_dir_and_version,
-            AddBankSnapshotError, ArchiveFormat, BankSnapshotInfo, BankSnapshotType, SnapshotError,
+            AddBankSnapshotError, ArchiveFormat, BankSnapshotInfo, SnapshotError,
             SnapshotRootPaths, SnapshotVersion, StorageAndNextAccountsFileId,
             UnpackedSnapshotsDirAndVersion, VerifySlotDeltasError,
         },
@@ -185,6 +185,7 @@ pub fn add_bank_snapshot(
             bank_snapshot_path.display(),
         );
 
+        use crate::snapshot_utils::BankSnapshotKind;
         Ok(BankSnapshotInfo {
             slot,
             snapshot_kind: BankSnapshotKind::Pre,
