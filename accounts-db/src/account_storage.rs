@@ -157,6 +157,8 @@ impl AccountStorage {
         slot: Slot,
         new_store: Arc<AccountStorageEntry>,
     ) -> ShrinkInProgress<'_> {
+        log::error!("shrinking in progress: {slot}, {}", line!());
+
         let shrinking_store = Arc::clone(
             &self
                 .map

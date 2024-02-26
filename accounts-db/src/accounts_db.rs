@@ -352,6 +352,7 @@ impl CurrentAncientAppendVec {
         min_bytes: usize,
     ) -> ShrinkInProgress<'a> {
         let size = get_ancient_append_vec_capacity().max(min_bytes as u64);
+        error!("get_store_for_shrink {}", line!());
         let shrink_in_progress = db.get_store_for_shrink(slot, size);
         *self = Self::new(slot, Arc::clone(shrink_in_progress.new_storage()));
         shrink_in_progress
@@ -4071,7 +4072,8 @@ impl AccountsDb {
         let mut rewrite_elapsed = Measure::start("rewrite_elapsed");
         if shrink_collect.alive_total_bytes > 0 {
             let (shrink_in_progress, time_us) = measure_us!(
-                self.get_store_for_shrink(slot, shrink_collect.alive_total_bytes as u64)
+                {error!("get_store_for_shrink {}", line!());
+                self.get_store_for_shrink(slot, shrink_collect.alive_total_bytes as u64)}
             );
             stats_sub.create_and_insert_store_elapsed_us = time_us;
 
@@ -4209,11 +4211,13 @@ impl AccountsDb {
 
     /// return a store that can contain 'aligned_total' bytes
     pub fn get_store_for_shrink(&self, slot: Slot, aligned_total: u64) -> ShrinkInProgress<'_> {
+        error!("get_store_for_shrink {}", line!());
         let shrunken_store = self
             .try_recycle_store(slot, aligned_total, aligned_total + 1024)
             .unwrap_or_else(|| {
                 self.create_store(slot, aligned_total, "shrink", self.shrink_paths.as_slice())
             });
+        error!("shrinking in progress: {slot}, {}", line!());
         self.storage.shrinking_in_progress(slot, shrunken_store)
     }
 
