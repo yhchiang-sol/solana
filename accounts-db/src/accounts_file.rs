@@ -239,7 +239,7 @@ impl AccountsFile {
         accounts: &StorableAccountsWithHashesAndWriteVersions<'a, 'b, T, U, V>,
         skip: usize,
     ) -> Option<Vec<StoredAccountInfo>> {
-        match self {
+        let r = match self {
             Self::AppendVec(av) => av.append_accounts(accounts, skip),
             Self::TieredHot(ts) => ts
                 .write_accounts(accounts, skip, &HOT_FORMAT)
@@ -252,7 +252,18 @@ impl AccountsFile {
                     infos
                 })
                 .ok(),
+        };
+        if r.is_none() {
+            match self {
+                Self::AppendVec(av) => {
+                    log::error!("av");
+                }
+                Self::TieredHot(ts) => {
+                    log::error!("ts");
+                }
+            };
         }
+        r
     }
 }
 

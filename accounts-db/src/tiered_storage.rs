@@ -138,13 +138,18 @@ impl TieredStorage {
             // panic here if self.reader.get() is not None as self.reader can only be
             // None since a false-value `was_written` indicates the accounts file has
             // not been written previously, implying is_read_only() was also false.
-            debug_assert!(!self.is_read_only());
+            assert!(!self.is_read_only());
+            let p = TieredStorageReader::new_from_path(&self.path);
+            if p.is_err() {
+                log::error!("failed: {p:?}");
+            }
             self.reader
-                .set(TieredStorageReader::new_from_path(&self.path)?)
+                .set(p?)
                 .unwrap();
 
             result
         } else {
+            log::error!("failed with bad format");
             Err(TieredStorageError::UnknownFormat(self.path.to_path_buf()))
         }
     }
