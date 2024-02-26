@@ -1060,7 +1060,7 @@ impl AccountStorageEntry {
             true, /* create new */
             file_size as usize,
         ));
-        // let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
+        let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
 
         Self {
             id: AtomicAccountsFileId::new(id),
@@ -5593,6 +5593,7 @@ impl AccountsDb {
         min_size: u64,
         max_size: u64,
     ) -> Option<Arc<AccountStorageEntry>> {
+        return None;
         let mut max = 0;
         let mut min = std::u64::MAX;
         let mut avail = 0;
