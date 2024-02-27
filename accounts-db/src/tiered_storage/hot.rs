@@ -520,11 +520,11 @@ impl HotStorageWriter {
         account_data: &[u8],
         executable: bool,
         rent_epoch: Option<Epoch>,
-        account_hash: Option<&AccountHash>,
+        _account_hash: Option<&AccountHash>,
     ) -> TieredStorageResult<usize> {
         let optional_fields = AccountMetaOptionalFields {
             rent_epoch,
-            account_hash,
+            account_hash: None,
         };
 
         let mut flags = AccountMetaFlags::new_from(&optional_fields);
