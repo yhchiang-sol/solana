@@ -667,7 +667,9 @@ impl Accounts {
                     }
                     let mut src_account = AccountSharedData::default();
                     use solana_sdk::account::WritableAccount;
+                    use solana_sdk::rent_collector::RENT_EXEMPT_RENT_EPOCH;
                     src_account.set_lamports(890_880); // minimum lamports to be rent-exempted
+                    src_account.set_rent_epoch(RENT_EXEMPT_RENT_EPOCH);
                     let mut pk = accounts_to_store[i].0.clone();
                     let range = 4_000_000usize;
                     let num_duplicates: usize = (900
