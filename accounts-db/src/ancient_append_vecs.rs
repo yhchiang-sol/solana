@@ -201,6 +201,9 @@ impl AncientSlotInfos {
                 self.all_infos.truncate(i);
                 break;
             }
+            if ancient_storages_required > 3 {
+                break;
+            }
         }
         log::error!(
             "ancient_append_vecs_packed: {}, {}, bytes: {}",
@@ -208,6 +211,7 @@ impl AncientSlotInfos {
             self.all_infos.len(),
             cumulative_bytes
         );
+        /*
         let max_slots = 400;
         if self.all_infos.len() > max_slots {
             log::error!(
@@ -218,6 +222,7 @@ impl AncientSlotInfos {
             );
                 self.all_infos.truncate(max_slots);
         }
+        */
     }
 
     /// remove entries from 'all_infos' such that combining
