@@ -1094,8 +1094,7 @@ impl Tower {
         if new_check != self.last_switch_threshold_check {
             info!(
                 "new switch threshold check: slot {}: {:?}",
-                switch_slot,
-                decision,
+                switch_slot, decision,
             );
             self.last_switch_threshold_check = new_check;
         }
@@ -1126,7 +1125,7 @@ impl Tower {
         };
 
         let lockout = *fork_stake as f64 / total_stake as f64;
-        info!(
+        trace!(
             "fork_stake slot: {}, threshold_vote slot: {}, lockout: {} fork_stake: {} total_stake: {}",
             slot,
             threshold_vote.slot(),
