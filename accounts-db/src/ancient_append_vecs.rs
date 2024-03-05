@@ -208,10 +208,16 @@ impl AncientSlotInfos {
             self.all_infos.len(),
             cumulative_bytes
         );
-        // let max_slots = 300;
-        // if self.all_infos.len() > max_slots {
-        //     self.all_infos.truncate(max_slots);
-        // }
+        let max_slots = 400;
+        if self.all_infos.len() > max_slots {
+            log::error!(
+                "ancient_append_vecs_packed: {}, truncating from: {} to {}",
+                line!(),
+                self.all_infos.len(),
+                max_slots
+            );
+                self.all_infos.truncate(max_slots);
+        }
     }
 
     /// remove entries from 'all_infos' such that combining
@@ -512,7 +518,7 @@ impl AccountsDb {
             if let Some(storage) = self.storage.get_slot_storage_entry(*slot) {
                 // log::error!("ancient_append_vecs_packed: {}, adding: {}, refs: {}", line!(), slot, Arc::strong_count(&storage));
 
-                if storage.capacity() > 1_300_000_000 {
+                if storage.capacity() > 100_000_000 {
                     // already so big we don't want to use it
                     too_big += 1;
                     continue;
