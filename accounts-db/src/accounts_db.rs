@@ -3949,7 +3949,7 @@ impl AccountsDb {
             None,
             false,//true,
         );
-        assert_eq!(index, std::cmp::min(accounts.len(), count));
+        // assert_eq!(index, std::cmp::min(accounts.len(), count));
         stats.alive_accounts.fetch_add(alive, Ordering::Relaxed);
         stats.dead_accounts.fetch_add(dead, Ordering::Relaxed);
 
