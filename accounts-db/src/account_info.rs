@@ -174,7 +174,7 @@ impl AccountInfo {
         )
     }
 
-    fn reduced_offset_to_offset(reduced_offset: OffsetReduced) -> Offset {
+    pub fn reduced_offset_to_offset(reduced_offset: OffsetReduced) -> Offset {
         (reduced_offset as Offset) * ALIGN_BOUNDARY_OFFSET
     }
 

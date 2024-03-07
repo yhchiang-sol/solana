@@ -1053,21 +1053,23 @@ impl AccountStorageEntry {
         }
     }
 
-    pub fn new_for_shrink(path: &Path, slot: Slot, id: AccountsFileId, file_size: u64) -> Self {
+    pub fn new_for_shrink(path: &Path, slot: Slot, id: AccountsFileId, _file_size: u64) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
+        /*
         let accounts = AccountsFile::AppendVec(AppendVec::new(
             &path,
             true, /* create new */
             file_size as usize,
         ));
-        // let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
+            */
+        let accounts = AccountsFile::TieredHot(TieredStorage::new_writable(&path));
 
         Self {
             id: AtomicAccountsFileId::new(id),
             slot: AtomicU64::new(slot),
             accounts,
-            count_and_status: SeqLock::new((0, AccountStorageStatus::Available)),
+            count_and_status: RwLock::new((0, AccountStorageStatus::Available)),
             approx_store_count: AtomicUsize::new(0),
             alive_bytes: AtomicUsize::new(0),
         }
