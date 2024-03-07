@@ -55,7 +55,15 @@ impl<'accounts_file, M: TieredAccountMeta> ReadableAccount
 {
     /// Returns the balance of the lamports of this account.
     fn lamports(&self) -> u64 {
-        self.meta.lamports()
+        if let Some(lamports) = self.meta.lamports_from_meta() {
+            return lamports;
+        }
+
+        // If the meta does not have the lamports, then it must inside the optional
+        // fields.
+        self.meta
+            .lamports_from_optional_fields(self.account_block)
+            .unwrap()
     }
 
     /// Returns the address of the owner of this account.
