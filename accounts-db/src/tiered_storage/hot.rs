@@ -28,7 +28,7 @@ use {
 
 pub const HOT_FORMAT: TieredStorageFormat = TieredStorageFormat {
     meta_entry_size: std::mem::size_of::<HotAccountMeta>(),
-    account_meta_format: AccountMetaFormat::Hot,
+    account_meta_format: AccountMetaFormat::HotPacked,
     owners_block_format: OwnersBlockFormat::AddressesOnly,
     index_block_format: IndexBlockFormat::AddressesThenOffsets,
     account_block_format: AccountBlockFormat::AlignedRaw,
@@ -314,17 +314,22 @@ impl HotStorageReader {
         &self,
         account_offset: HotAccountOffset,
     ) -> TieredStorageResult<&HotAccountMeta> {
-        let offset = account_offset.offset();
+        match self.footer.account_meta_format {
+            AccountMetaFormat::HotPacked => {
+                let offset = account_offset.offset();
 
-        assert!(
-            offset.saturating_add(std::mem::size_of::<HotAccountMeta>())
-                <= self.footer.index_block_offset as usize,
-            "reading HotAccountOffset ({}) would exceed accounts blocks offset boundary ({}).",
-            offset,
-            self.footer.index_block_offset,
-        );
-        let (meta, _) = get_pod::<HotAccountMeta>(&self.mmap, offset)?;
-        Ok(meta)
+                assert!(
+                    offset.saturating_add(std::mem::size_of::<HotAccountMeta>())
+                        <= self.footer.index_block_offset as usize,
+                    "reading HotAccountOffset ({}) would exceed accounts blocks offset boundary ({}).",
+                    offset,
+                    self.footer.index_block_offset,
+                );
+                let (meta, _) = get_pod::<HotAccountMeta>(&self.mmap, offset)?;
+                Ok(meta)
+            }
+            _ => Err(TieredStorageError::UnsupportedAccountMetaFormat()),
+        }
     }
 
     /// Returns the offset to the account given the specified index.
@@ -843,7 +848,7 @@ pub mod tests {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("test_hot_storage_footer");
         let expected_footer = TieredStorageFooter {
-            account_meta_format: AccountMetaFormat::Hot,
+            account_meta_format: AccountMetaFormat::HotPacked,
             owners_block_format: OwnersBlockFormat::AddressesOnly,
             index_block_format: IndexBlockFormat::AddressesThenOffsets,
             account_block_format: AccountBlockFormat::AlignedRaw,
@@ -891,7 +896,7 @@ pub mod tests {
 
         let account_offsets: Vec<_>;
         let mut footer = TieredStorageFooter {
-            account_meta_format: AccountMetaFormat::Hot,
+            account_meta_format: AccountMetaFormat::HotPacked,
             account_entry_count: NUM_ACCOUNTS,
             ..TieredStorageFooter::default()
         };
@@ -933,7 +938,7 @@ pub mod tests {
             .join("test_get_acount_meta_from_offset_out_of_bounds");
 
         let footer = TieredStorageFooter {
-            account_meta_format: AccountMetaFormat::Hot,
+            account_meta_format: AccountMetaFormat::HotPacked,
             index_block_offset: 160,
             ..TieredStorageFooter::default()
         };
@@ -976,7 +981,7 @@ pub mod tests {
             .collect();
 
         let mut footer = TieredStorageFooter {
-            account_meta_format: AccountMetaFormat::Hot,
+            account_meta_format: AccountMetaFormat::HotPacked,
             account_entry_count: NUM_ACCOUNTS,
             // Set index_block_offset to 0 as we didn't write any account
             // meta/data in this test
@@ -1020,7 +1025,7 @@ pub mod tests {
             .collect();
 
         let footer = TieredStorageFooter {
-            account_meta_format: AccountMetaFormat::Hot,
+            account_meta_format: AccountMetaFormat::HotPacked,
             // meta/data nor index block in this test
             owners_block_offset: 0,
             ..TieredStorageFooter::default()
@@ -1081,7 +1086,7 @@ pub mod tests {
         .take(NUM_ACCOUNTS as usize)
         .collect();
         let mut footer = TieredStorageFooter {
-            account_meta_format: AccountMetaFormat::Hot,
+            account_meta_format: AccountMetaFormat::HotPacked,
             account_entry_count: NUM_ACCOUNTS,
             owner_count: NUM_OWNERS,
             ..TieredStorageFooter::default()
@@ -1200,7 +1205,7 @@ pub mod tests {
             .collect();
 
         let mut footer = TieredStorageFooter {
-            account_meta_format: AccountMetaFormat::Hot,
+            account_meta_format: AccountMetaFormat::HotPacked,
             account_entry_count: NUM_ACCOUNTS as u32,
             owner_count: NUM_OWNERS as u32,
             ..TieredStorageFooter::default()
