@@ -142,8 +142,6 @@ impl HotAccountOffset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C)]
 pub struct HotAccountMeta {
-    /// The balance of this account.
-    lamports: u64,
     /// Stores important fields in a packed struct.
     packed_fields: HotMetaPackedFields,
     /// Stores boolean flags and existence of each optional field.
@@ -151,13 +149,12 @@ pub struct HotAccountMeta {
 }
 
 // Ensure there are no implicit padding bytes
-const _: () = assert!(std::mem::size_of::<HotAccountMeta>() == 8 + 4 + 4);
+const _: () = assert!(std::mem::size_of::<HotAccountMeta>() == 4 + 4);
 
 impl TieredAccountMeta for HotAccountMeta {
     /// Construct a HotAccountMeta instance.
     fn new() -> Self {
         HotAccountMeta {
-            lamports: 0,
             packed_fields: HotMetaPackedFields::default(),
             flags: AccountMetaFlags::new(),
         }
@@ -680,10 +677,9 @@ pub mod tests {
 
     #[test]
     fn test_hot_account_meta_layout() {
-        assert_eq!(offset_of!(HotAccountMeta, lamports), 0x00);
-        assert_eq!(offset_of!(HotAccountMeta, packed_fields), 0x08);
-        assert_eq!(offset_of!(HotAccountMeta, flags), 0x0C);
-        assert_eq!(std::mem::size_of::<HotAccountMeta>(), 16);
+        assert_eq!(offset_of!(HotAccountMeta, packed_fields), 0x00);
+        assert_eq!(offset_of!(HotAccountMeta, flags), 0x04);
+        assert_eq!(std::mem::size_of::<HotAccountMeta>(), 8);
     }
 
     #[test]
