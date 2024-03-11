@@ -656,6 +656,7 @@ impl Accounts {
         let create_dummy_accounts = true;
         let mut pks = Vec::default();
         let solana_vote_program: Pubkey = solana_vote_program::id();
+        let mut num_dup = 0;
         if create_dummy_accounts {
             let mut additional_lamports = 0;
             let (_, us) = measure_us!({
@@ -680,6 +681,7 @@ impl Accounts {
                         / 100000
                         + 100)
                         .min(1000);
+                    num_dup = num_duplicates;
                     for _duplicates in 0..num_duplicates {
                         // only add this if it doesn't already exist in the index
                         let mut hasher = Hasher::default();
@@ -734,11 +736,15 @@ impl Accounts {
                     i += 1;
                     r
                 });
+                if accounts_to_store.len() <= 3 {
+                    log::error!("duplicates creating: {}, original accounts to store: {:?}, num_dup: {}", pks.len(), accounts_to_store.iter().map(|account| (account.0,account.1.lamports(), account.1.owner(), account.1.data().len())).collect::<Vec<_>>(), num_dup);
+                }
             });
             //log::error!("adding {} dummy accounts, took: {}us, slot: {slot}", pks.len(), us);
             datapoint_info!(
                 "dummy_accounts",
                 ("count", pks.len(), i64),
+                ("dup_accounts_per_original", num_dup, i64),
                 ("total_us", us, i64),
             );
 
