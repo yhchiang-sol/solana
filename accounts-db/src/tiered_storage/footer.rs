@@ -1,13 +1,13 @@
 use {
     crate::tiered_storage::{
         error::TieredStorageError,
-        file::TieredStorageFile,
+        file::{TieredStorageFile, TieredStorageMagicNumber},
         index::IndexBlockFormat,
         mmap_utils::{get_pod, get_type},
         owners::OwnersBlockFormat,
         TieredStorageResult,
     },
-    bytemuck::{Pod, Zeroable},
+    bytemuck::Zeroable,
     memmap2::Mmap,
     num_enum::TryFromPrimitiveError,
     solana_sdk::{hash::Hash, pubkey::Pubkey},
@@ -25,22 +25,6 @@ static_assertions::const_assert_eq!(mem::size_of::<TieredStorageFooter>(), 160);
 /// The size of the ending part of the footer.  This size should remain unchanged
 /// even when the footer's format changes.
 pub const FOOTER_TAIL_SIZE: usize = 24;
-
-/// The ending 8 bytes of a valid tiered account storage file.
-pub const FOOTER_MAGIC_NUMBER: u64 = 0x502A2AB5; // SOLALABS -> SOLANA LABS
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Pod, Zeroable)]
-#[repr(C)]
-pub struct TieredStorageMagicNumber(pub u64);
-
-// Ensure there are no implicit padding bytes
-const _: () = assert!(std::mem::size_of::<TieredStorageMagicNumber>() == 8);
-
-impl Default for TieredStorageMagicNumber {
-    fn default() -> Self {
-        Self(FOOTER_MAGIC_NUMBER)
-    }
-}
 
 #[repr(u16)]
 #[derive(
@@ -186,7 +170,7 @@ impl Default for TieredStorageFooter {
 
 impl TieredStorageFooter {
     pub fn new_from_path(path: impl AsRef<Path>) -> TieredStorageResult<Self> {
-        let file = TieredStorageFile::new_readonly(path);
+        let file = TieredStorageFile::new_readonly(path)?;
         Self::new_from_footer_block(&file)
     }
 

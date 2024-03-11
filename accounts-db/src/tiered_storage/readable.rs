@@ -1,4 +1,5 @@
 use {
+    super::file::TieredStorageFile,
     crate::{
         account_storage::meta::StoredAccountMeta,
         accounts_file::MatchAccountOwnerError,
@@ -103,9 +104,10 @@ pub enum TieredStorageReader {
 impl TieredStorageReader {
     /// Creates a reader for the specified tiered storage accounts file.
     pub fn new_from_path(path: impl AsRef<Path>) -> TieredStorageResult<Self> {
-        let footer = TieredStorageFooter::new_from_path(&path)?;
+        let file = TieredStorageFile::new_readonly(&path)?;
+        let footer = TieredStorageFooter::new_from_footer_block(&file)?;
         match footer.account_meta_format {
-            AccountMetaFormat::Hot => Ok(Self::Hot(HotStorageReader::new_from_path(path)?)),
+            AccountMetaFormat::Hot => Ok(Self::Hot(HotStorageReader::new_from_file(file)?)),
         }
     }
 

@@ -25,7 +25,7 @@ use {
         account::ReadableAccount, pubkey::Pubkey, rent_collector::RENT_EXEMPT_RENT_EPOCH,
         stake_history::Epoch,
     },
-    std::{borrow::Borrow, fs::OpenOptions, option::Option, path::Path},
+    std::{borrow::Borrow, option::Option, path::Path},
 };
 
 pub const HOT_FORMAT: TieredStorageFormat = TieredStorageFormat {
@@ -274,8 +274,12 @@ pub struct HotStorageReader {
 impl HotStorageReader {
     /// Constructs a HotStorageReader from the specified path.
     pub fn new_from_path(path: impl AsRef<Path>) -> TieredStorageResult<Self> {
-        let file = OpenOptions::new().read(true).open(path)?;
-        let mmap = unsafe { MmapOptions::new().map(&file)? };
+        let file = TieredStorageFile::new_readonly(&path)?;
+        Self::new_from_file(file)
+    }
+
+    pub fn new_from_file(file: TieredStorageFile) -> TieredStorageResult<Self> {
+        let mmap = unsafe { MmapOptions::new().map(&file.0)? };
         // Here we are copying the footer, as accessing any data in a
         // TieredStorage instance requires accessing its Footer.
         // This can help improve cache locality and reduce the overhead
