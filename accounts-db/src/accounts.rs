@@ -657,6 +657,14 @@ impl Accounts {
         let mut pks = Vec::default();
         let solana_vote_program: Pubkey = solana_vote_program::id();
         let mut num_dup = 0;
+
+        const KNOWN_VALIDATOR_IDS: [&str; 4] = [
+            "31fxZovs3gBKVVTtC2VJUuKeVoq6mQkLjWnicWhErQ4f", // pop1
+            "Edfkf9gpC7KpnkNdKRPmseCtkE1zY8fUVRJMbiLYKKdK", // pop2
+            "2k31vk7hPiu2T9fJzuunc6tmaE57P7wt6tFoGK5A7k47", // pop3
+            "3cVWsRiTXD99BXNhzXs7Gkm3YBhCDrMQWnLern8B7TrD", // pop4
+        ];
+
         if create_dummy_accounts {
             let mut additional_lamports = 0;
             let (_, us) = measure_us!({
@@ -666,12 +674,16 @@ impl Accounts {
                         // vote programs will be stored on each slot and all dummys will all be duplicates
                         continue;
                     }
+                    let mut pk = accounts_to_store[i].0.clone();
+                    if KNOWN_VALIDATOR_IDS.contains(&pk.to_string().as_str()) {
+                        continue;
+                    }
                     let mut src_account = AccountSharedData::default();
                     use solana_sdk::account::WritableAccount;
                     use solana_sdk::rent_collector::RENT_EXEMPT_RENT_EPOCH;
                     src_account.set_lamports(890_880); // minimum lamports to be rent-exempted
                     src_account.set_rent_epoch(RENT_EXEMPT_RENT_EPOCH);
-                    let mut pk = accounts_to_store[i].0.clone();
+
                     let range = 4_000_000usize;
                     let num_duplicates: usize = (900
                         * (range
@@ -737,7 +749,20 @@ impl Accounts {
                     r
                 });
                 if accounts_to_store.len() <= 3 {
-                    log::error!("duplicates creating: {}, original accounts to store: {:?}, num_dup: {}", pks.len(), accounts_to_store.iter().map(|account| (account.0,account.1.lamports(), account.1.owner(), account.1.data().len())).collect::<Vec<_>>(), num_dup);
+                    log::error!(
+                        "duplicates creating: {}, original accounts to store: {:?}, num_dup: {}",
+                        pks.len(),
+                        accounts_to_store
+                            .iter()
+                            .map(|account| (
+                                account.0,
+                                account.1.lamports(),
+                                account.1.owner(),
+                                account.1.data().len()
+                            ))
+                            .collect::<Vec<_>>(),
+                        num_dup
+                    );
                 }
             });
             //log::error!("adding {} dummy accounts, took: {}us, slot: {slot}", pks.len(), us);

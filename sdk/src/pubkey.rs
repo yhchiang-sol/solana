@@ -35,7 +35,10 @@ pub fn read_pubkey_file(infile: &str) -> Result<Pubkey, Box<dyn std::error::Erro
 
 #[cfg(test)]
 mod tests {
-    use {super::*, std::fs::remove_file};
+    use {
+        super::*,
+        std::{fs::remove_file, str::FromStr},
+    };
 
     #[test]
     fn test_read_write_pubkey() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,5 +49,21 @@ mod tests {
         assert_eq!(read, pubkey);
         remove_file(filename)?;
         Ok(())
+    }
+
+    #[test]
+    fn test_foo() {
+        const KNOWN_VALIDATOR_IDS: [&str; 4] = [
+            "31fxZovs3gBKVVTtC2VJUuKeVoq6mQkLjWnicWhErQ4f", // pop1
+            "Edfkf9gpC7KpnkNdKRPmseCtkE1zY8fUVRJMbiLYKKdK", // pop2
+            "2k31vk7hPiu2T9fJzuunc6tmaE57P7wt6tFoGK5A7k47", // pop3
+            "3cVWsRiTXD99BXNhzXs7Gkm3YBhCDrMQWnLern8B7TrD", // pop4
+        ];
+
+        let k = Pubkey::from_str("31fxZovs3gBKVVTtC2VJUuKeVoq6mQkLjWnicWhErQ4f").unwrap();
+        assert!(KNOWN_VALIDATOR_IDS.contains(&k.to_string().as_str()));
+
+        let k = Pubkey::from_str("31fxZovs3gBKVVTtC2VJUuKeVoq6mQkLjWnicWhErQ4g").unwrap();
+        assert!(!KNOWN_VALIDATOR_IDS.contains(&k.to_string().as_str()));
     }
 }
