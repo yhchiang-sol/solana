@@ -658,26 +658,20 @@ impl Accounts {
         let solana_vote_program: Pubkey = solana_vote_program::id();
         let mut num_dup = 0;
 
-        const KNOWN_VALIDATOR_IDS: [&str; 4] = [
-            "31fxZovs3gBKVVTtC2VJUuKeVoq6mQkLjWnicWhErQ4f", // pop1
-            "Edfkf9gpC7KpnkNdKRPmseCtkE1zY8fUVRJMbiLYKKdK", // pop2
-            "2k31vk7hPiu2T9fJzuunc6tmaE57P7wt6tFoGK5A7k47", // pop3
-            "3cVWsRiTXD99BXNhzXs7Gkm3YBhCDrMQWnLern8B7TrD", // pop4
-        ];
+        // skip adding dummy account for vote tx
+        for i in 0..accounts_to_store.len() {
+            if accounts_to_store[i].1.owner() == &solana_vote_program {
+                return None;
+            }
+        }
 
         if create_dummy_accounts {
             let mut additional_lamports = 0;
             let (_, us) = measure_us!({
                 for i in 0..accounts_to_store.len() {
                     self.accounts_db.maybe_throttle_add();
-                    if accounts_to_store[i].1.owner() == &solana_vote_program {
-                        // vote programs will be stored on each slot and all dummys will all be duplicates
-                        continue;
-                    }
                     let mut pk = accounts_to_store[i].0.clone();
-                    if KNOWN_VALIDATOR_IDS.contains(&pk.to_string().as_str()) {
-                        continue;
-                    }
+
                     let mut src_account = AccountSharedData::default();
                     use solana_sdk::account::WritableAccount;
                     use solana_sdk::rent_collector::RENT_EXEMPT_RENT_EPOCH;
