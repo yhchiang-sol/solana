@@ -653,17 +653,14 @@ impl Accounts {
         let (accounts_to_store, transactions) =
             self.collect_accounts_to_store(txs, res, loaded, durable_nonce, lamports_per_signature);
         let mut additional_lamports_result = None;
-        let create_dummy_accounts = true;
         let mut pks = Vec::default();
         let solana_vote_program: Pubkey = solana_vote_program::id();
         let mut num_dup = 0;
 
         // skip adding dummy account for vote tx
-        for i in 0..accounts_to_store.len() {
-            if accounts_to_store[i].1.owner() == &solana_vote_program {
-                return None;
-            }
-        }
+        let create_dummy_accounts = !accounts_to_store
+            .iter
+            .any(|account| account.1.owner() == &solana_vote_program);
 
         if create_dummy_accounts {
             let mut additional_lamports = 0;
