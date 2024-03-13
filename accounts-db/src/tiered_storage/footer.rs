@@ -57,9 +57,7 @@ impl Default for TieredStorageMagicNumber {
 pub enum AccountMetaFormat {
     #[default]
     Hot = 0,
-    HotPacked,
-    // Temporarily comment out to avoid unimplemented!() block
-    // Cold = 1,
+    HotPacked = 1,
 }
 
 #[repr(u16)]

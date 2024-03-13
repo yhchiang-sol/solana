@@ -26,7 +26,7 @@ impl TieredStorageReader {
         let footer = TieredStorageFooter::new_from_path(&path)?;
         match footer.account_meta_format {
             AccountMetaFormat::HotPacked => Ok(Self::Hot(HotStorageReader::new_from_path(path)?)),
-            _ => Err(TieredStorageError::UnsupportedAccountMetaFormat()),
+            _ => Err(TieredStorageError::UnsupportedAccountMetaFormat),
         }
     }
 

@@ -32,6 +32,6 @@ pub enum TieredStorageError {
     #[error("OffsetAlignmentError: offset {0} must be multiple of {1}")]
     OffsetAlignmentError(usize, usize),
 
-    #[error("UnsupportedAccountMetaFormat: format is deprecated or unsupported.")]
-    UnsupportedAccountMetaFormat(),
+    #[error("UnsupportedAccountMetaFormat: format is unsupported.")]
+    UnsupportedAccountMetaFormat,
 }

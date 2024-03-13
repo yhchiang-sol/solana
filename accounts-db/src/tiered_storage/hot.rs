@@ -5,6 +5,7 @@ use {
         account_storage::meta::{StoredAccountInfo, StoredAccountMeta},
         accounts_file::MatchAccountOwnerError,
         accounts_hash::AccountHash,
+        accounts_index::ZeroLamport,
         tiered_storage::{
             byte_block,
             file::TieredStorageFile,
@@ -192,11 +193,6 @@ impl TieredAccountMeta for HotAccountMeta {
         self
     }
 
-    /// Whether the account has zero lamports.
-    fn has_zero_lamports(&self) -> bool {
-        self.flags.has_zero_lamports()
-    }
-
     /// Returns the balance of the lamports associated with the account
     /// from the TieredAccountMeta, or None if the lamports is stored
     /// inside the optional field.
@@ -272,6 +268,13 @@ impl TieredAccountMeta for HotAccountMeta {
     /// account block.
     fn account_data<'a>(&self, account_block: &'a [u8]) -> &'a [u8] {
         &account_block[..self.account_data_size(account_block)]
+    }
+}
+
+impl ZeroLamport for HotAccountMeta {
+    /// Whether the account has zero lamports.
+    fn is_zero_lamport(&self) -> bool {
+        self.flags.is_zero_lamport()
     }
 }
 
@@ -409,7 +412,7 @@ impl HotStorageReader {
                 let (meta, _) = get_pod::<HotAccountMeta>(&self.mmap, offset)?;
                 Ok(meta)
             }
-            _ => Err(TieredStorageError::UnsupportedAccountMetaFormat()),
+            _ => Err(TieredStorageError::UnsupportedAccountMetaFormat),
         }
     }
 
@@ -456,7 +459,7 @@ impl HotStorageReader {
             .get_account_meta_from_offset(account_offset)
             .map_err(|_| MatchAccountOwnerError::UnableToLoad)?;
 
-        if account_meta.has_zero_lamports() {
+        if account_meta.is_zero_lamport() {
             Err(MatchAccountOwnerError::NoMatch)
         } else {
             let account_owner = self

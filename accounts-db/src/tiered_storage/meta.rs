@@ -1,29 +1,11 @@
 //! The account meta and related structs for the tiered storage.
 
 use {
-    crate::tiered_storage::owners::OwnerOffset,
+    crate::{accounts_index::ZeroLamport, tiered_storage::owners::OwnerOffset},
     bytemuck::{Pod, Zeroable},
     modular_bitfield::prelude::*,
     solana_sdk::stake_history::Epoch,
 };
-
-/// The struct that handles the account meta flags.
-#[bitfield(bits = 32)]
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Pod, Zeroable)]
-pub struct AccountMetaFlags {
-    /// whether the account meta has rent epoch
-    pub has_rent_epoch: bool,
-    /// whether the account is executable
-    pub executable: bool,
-    /// this fewer-than-u64 lamports info stores lamports that can fit
-    /// within its limitation, or a bit indicating the lamport is stored
-    /// separately as an optional field.
-    ///
-    /// Note that the number of bits using in this field must match
-    /// the const LAMPORTS_INFO_BITS.
-    pub lamports_info: B30,
-}
 
 /// The number of bits used in lamports_info field.
 /// Note that this value must match the bits in AccountMetaFlags::lamports_info.
@@ -43,12 +25,30 @@ pub const LAMPORTS_INFO_IS_ZERO_BALANCE: u32 = 0;
 /// in optional fields.
 pub const LAMPORTS_INFO_HAS_OPTIONAL_FIELD: u32 = 1;
 
+/// The struct that handles the account meta flags.
+#[bitfield(bits = 32)]
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Pod, Zeroable)]
+pub struct AccountMetaFlags {
+    /// whether the account meta has rent epoch
+    pub has_rent_epoch: bool,
+    /// whether the account is executable
+    pub executable: bool,
+    /// this fewer-than-u64 lamports info stores lamports that can fit
+    /// within its limitation, or a bit indicating the lamport is stored
+    /// separately as an optional field.
+    ///
+    /// Note that the number of bits using in this field must match
+    /// the const LAMPORTS_INFO_BITS.
+    pub lamports_info: B30,
+}
+
 // Ensure there are no implicit padding bytes
 const _: () = assert!(std::mem::size_of::<AccountMetaFlags>() == 4);
 
 /// A trait that allows different implementations of the account meta that
 /// support different tiers of the accounts storage.
-pub trait TieredAccountMeta: Sized {
+pub trait TieredAccountMeta: Sized + ZeroLamport {
     /// Constructs a TieredAcountMeta instance.
     fn new() -> Self;
 
@@ -66,9 +66,6 @@ pub trait TieredAccountMeta: Sized {
     /// A builder function that initializes the AccountMetaFlags of the current
     /// meta.
     fn with_flags(self, flags: &AccountMetaFlags) -> Self;
-
-    /// Whether the account has zero lamports.
-    fn has_zero_lamports(&self) -> bool;
 
     /// Returns the balance of the lamports associated with the account
     /// from the TieredAccountMeta, or None if the lamports is stored
@@ -133,7 +130,7 @@ impl AccountMetaFlags {
         }
     }
 
-    pub fn has_zero_lamports(&self) -> bool {
+    pub fn is_zero_lamport(&self) -> bool {
         self.lamports_info() == LAMPORTS_INFO_IS_ZERO_BALANCE
     }
 
