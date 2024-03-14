@@ -10,7 +10,9 @@ use {
             file::TieredStorageFile,
             footer::{AccountBlockFormat, AccountMetaFormat, TieredStorageFooter},
             index::{AccountIndexWriterEntry, AccountOffset, IndexBlockFormat, IndexOffset},
-            meta::{AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta},
+            meta::{
+                AccountMetaFlags, AccountMetaOptionalFields, TieredAccountMeta, TieredWriterStats,
+            },
             mmap_utils::{get_pod, get_slice},
             owners::{OwnerOffset, OwnersBlockFormat, OwnersTable, OWNER_NO_OWNER},
             readable::TieredReadableAccount,
@@ -21,11 +23,12 @@ use {
     bytemuck::{Pod, Zeroable},
     memmap2::{Mmap, MmapOptions},
     modular_bitfield::prelude::*,
+    solana_measure::measure::Measure,
     solana_sdk::{
         account::ReadableAccount, pubkey::Pubkey, rent_collector::RENT_EXEMPT_RENT_EPOCH,
         stake_history::Epoch,
     },
-    std::{borrow::Borrow, fs::OpenOptions, option::Option, path::Path},
+    std::{borrow::Borrow, fs::OpenOptions, option::Option, path::Path, thread, time::Duration},
 };
 
 pub const HOT_FORMAT: TieredStorageFormat = TieredStorageFormat {
@@ -524,6 +527,7 @@ impl HotStorageWriter {
         account_data: &[u8],
         executable: bool,
         rent_epoch: Option<Epoch>,
+        stats: &mut TieredWriterStats,
     ) -> TieredStorageResult<usize> {
         let optional_fields = AccountMetaOptionalFields {
             rent_epoch,
@@ -542,12 +546,15 @@ impl HotStorageWriter {
 
         let mut stored_size = 0;
 
+        let mut store_account_entry_time = Measure::start("store_account_entry");
         stored_size += self.storage.write_pod(&meta)?;
         stored_size += self.storage.write_bytes(account_data)?;
         stored_size += self
             .storage
             .write_bytes(&PADDING_BUFFER[0..(padding_len as usize)])?;
         stored_size += write_optional_fields(&self.storage, &optional_fields)?;
+        store_account_entry_time.stop();
+        stats.account_entry_ns += store_account_entry_time.as_ns();
 
         Ok(stored_size)
     }
@@ -565,11 +572,12 @@ impl HotStorageWriter {
         &self,
         accounts: &StorableAccountsWithHashesAndWriteVersions<'a, 'b, T, U, V>,
         skip: usize,
-    ) -> TieredStorageResult<Vec<StoredAccountInfo>> {
+    ) -> TieredStorageResult<(Vec<StoredAccountInfo>, TieredWriterStats)> {
         let mut footer = new_hot_footer();
         let mut index = vec![];
         let mut owners_table = OwnersTable::default();
         let mut cursor = 0;
+        let mut stats = TieredWriterStats::default();
 
         // writing accounts blocks
         let len = accounts.accounts.len();
@@ -597,8 +605,14 @@ impl HotStorageWriter {
                 })
                 .unwrap_or((0, &OWNER_NO_OWNER, &[], false, None));
             let owner_offset = owners_table.insert(owner);
-            let stored_size =
-                self.write_account(lamports, owner_offset, data, executable, rent_epoch)?;
+            let stored_size = self.write_account(
+                lamports,
+                owner_offset,
+                data,
+                executable,
+                rent_epoch,
+                &mut stats,
+            )?;
             cursor += stored_size;
 
             stored_infos.push(StoredAccountInfo {
@@ -621,6 +635,8 @@ impl HotStorageWriter {
 
         // writing index block
         // expect the offset of each block aligned.
+
+        let mut store_index_block_time = Measure::start("store_index_block");
         assert!(cursor % HOT_BLOCK_ALIGNMENT == 0);
         footer.index_block_offset = cursor as u64;
         cursor += footer
@@ -633,8 +649,11 @@ impl HotStorageWriter {
             assert_eq!(cursor % HOT_BLOCK_ALIGNMENT, 4);
             cursor += self.storage.write_pod(&0u32)?;
         }
+        store_index_block_time.stop();
+        stats.index_block_ns += store_index_block_time.as_ns();
 
         // writing owners block
+        let mut store_owners_block_time = Measure::start("store_owners_block");
         assert!(cursor % HOT_BLOCK_ALIGNMENT == 0);
         footer.owners_block_offset = cursor as u64;
         footer.owner_count = owners_table.len() as u32;
@@ -643,8 +662,10 @@ impl HotStorageWriter {
             .write_owners_block(&self.storage, &owners_table)?;
 
         footer.write_footer_block(&self.storage)?;
+        store_owners_block_time.stop();
+        stats.owners_block_ns += store_owners_block_time.as_ns();
 
-        Ok(stored_infos)
+        Ok((stored_infos, stats))
     }
 }
 
@@ -1329,7 +1350,7 @@ pub mod tests {
 
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("test_write_account_and_index_blocks");
-        let stored_infos = {
+        let (stored_infos, _) = {
             let writer = HotStorageWriter::new(&path).unwrap();
             writer.write_accounts(&storable_accounts, 0).unwrap()
         };

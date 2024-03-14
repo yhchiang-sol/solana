@@ -205,6 +205,16 @@ impl AccountMetaOptionalFields {
     }
 }
 
+/// The stats for writing tiered-storage files.
+#[derive(Debug, Default)]
+pub struct TieredWriterStats {
+    /// Measure the disk write time for storing account entries.
+    pub account_entry_ns: u64,
+    /// Measure the disk write time for storing index block.
+    pub index_block_ns: u64,
+    /// Measure the disk write time for storing owners block.
+    pub owners_block_ns: u64,
+}
 #[cfg(test)]
 pub mod tests {
     use super::*;
