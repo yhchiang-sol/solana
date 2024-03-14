@@ -176,7 +176,7 @@ impl TieredStorageReader {
 pub mod tests {
     use {
         super::*,
-        crate::tiered_storage::{file::TieredStorageFile, footer::AccountMetaFormat},
+        crate::tiered_storage::{file::TieredWritableFile, footer::AccountMetaFormat},
         tempfile::TempDir,
     };
 
@@ -193,8 +193,8 @@ pub mod tests {
         };
 
         {
-            let file = TieredStorageFile::new_writable(&path).unwrap();
-            footer.write_footer_block(&file).unwrap();
+            let mut file = TieredWritableFile::new(&path).unwrap();
+            footer.write_footer_block(&mut file).unwrap();
         }
 
         TieredStorageReader::new_from_path(&path).unwrap();
