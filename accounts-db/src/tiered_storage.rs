@@ -11,7 +11,6 @@ pub mod mmap_utils;
 pub mod owners;
 pub mod readable;
 mod test_utils;
-pub mod writer;
 
 use {
     crate::{
@@ -129,7 +128,7 @@ impl TieredStorage {
 
         if format == &HOT_FORMAT {
             let result = {
-                let writer = HotStorageWriter::new(&self.path)?;
+                let mut writer = HotStorageWriter::new(&self.path)?;
                 writer.write_accounts(accounts, skip)
             };
 
