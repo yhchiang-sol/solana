@@ -24,6 +24,7 @@ use {
     hot::{HotStorageWriter, HOT_FORMAT},
     index::IndexBlockFormat,
     log::*,
+    meta::TieredWriterStats,
     owners::OwnersBlockFormat,
     readable::TieredStorageReader,
     solana_sdk::account::ReadableAccount,
@@ -122,7 +123,7 @@ impl TieredStorage {
         accounts: &StorableAccountsWithHashesAndWriteVersions<'a, 'b, T, U, V>,
         skip: usize,
         format: &TieredStorageFormat,
-    ) -> TieredStorageResult<Vec<StoredAccountInfo>> {
+    ) -> TieredStorageResult<(Vec<StoredAccountInfo>, TieredWriterStats)> {
         let was_written = self.already_written.swap(true, Ordering::AcqRel);
 
         if was_written {

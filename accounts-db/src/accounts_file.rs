@@ -8,7 +8,8 @@ use {
         append_vec::{AppendVec, AppendVecError},
         storable_accounts::StorableAccounts,
         tiered_storage::{
-            error::TieredStorageError, hot::HOT_FORMAT, index::IndexOffset, TieredStorage,
+            error::TieredStorageError, hot::HOT_FORMAT, index::IndexOffset,
+            meta::TieredWriterStats, TieredStorage,
         },
     },
     solana_sdk::{account::ReadableAccount, clock::Slot, pubkey::Pubkey},
@@ -238,20 +239,26 @@ impl AccountsFile {
         &self,
         accounts: &StorableAccountsWithHashesAndWriteVersions<'a, 'b, T, U, V>,
         skip: usize,
-    ) -> Option<Vec<StoredAccountInfo>> {
+    ) -> (Option<Vec<StoredAccountInfo>>, Option<TieredWriterStats>) {
         match self {
-            Self::AppendVec(av) => av.append_accounts(accounts, skip),
-            Self::TieredHot(ts) => ts
-                .write_accounts(accounts, skip, &HOT_FORMAT)
-                .map(|mut infos| {
-                    infos.iter_mut().for_each(|info| {
-                        // A conversion is needed here as TieredStorage uses reduced-offsets
-                        // while AccountsDb uses non-reduced-offsets instead.
-                        info.offset = AccountInfo::reduced_offset_to_offset(info.offset as u32);
-                    });
-                    infos
-                })
-                .ok(),
+            Self::AppendVec(av) => (av.append_accounts(accounts, skip), None),
+            Self::TieredHot(ts) => {
+                let rv =
+                    ts.write_accounts(accounts, skip, &HOT_FORMAT)
+                        .map(|(mut infos, stats)| {
+                            infos.iter_mut().for_each(|info| {
+                                // A conversion is needed here as TieredStorage uses reduced-offsets
+                                // while AccountsDb uses non-reduced-offsets instead.
+                                info.offset =
+                                    AccountInfo::reduced_offset_to_offset(info.offset as u32);
+                            });
+                            (infos, stats)
+                        });
+                match rv {
+                    Ok((infos, stats)) => (Some(infos), Some(stats)),
+                    Err(_) => (None, None),
+                }
+            }
         }
     }
 }
