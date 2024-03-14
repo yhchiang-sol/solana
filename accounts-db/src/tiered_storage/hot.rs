@@ -7,7 +7,7 @@ use {
         accounts_hash::AccountHash,
         tiered_storage::{
             byte_block,
-            file::TieredStorageFile,
+            file::TieredWritableFile,
             footer::{AccountBlockFormat, AccountMetaFormat, TieredStorageFooter},
             index::{AccountIndexWriterEntry, AccountOffset, IndexBlockFormat, IndexOffset},
             meta::{
@@ -488,7 +488,7 @@ impl HotStorageReader {
 }
 
 fn write_optional_fields(
-    file: &TieredStorageFile,
+    file: &TieredWritableFile,
     opt_fields: &AccountMetaOptionalFields,
 ) -> TieredStorageResult<usize> {
     let mut size = 0;
@@ -507,14 +507,14 @@ fn write_optional_fields(
 /// The writer that creates a hot accounts file.
 #[derive(Debug)]
 pub struct HotStorageWriter {
-    storage: TieredStorageFile,
+    storage: TieredWritableFile,
 }
 
 impl HotStorageWriter {
     /// Create a new HotStorageWriter with the specified path.
     pub fn new(file_path: impl AsRef<Path>) -> TieredStorageResult<Self> {
         Ok(Self {
-            storage: TieredStorageFile::new_writable(file_path)?,
+            storage: TieredWritableFile::new(file_path)?,
         })
     }
 
@@ -675,7 +675,7 @@ pub mod tests {
         super::*,
         crate::tiered_storage::{
             byte_block::ByteBlockWriter,
-            file::TieredStorageFile,
+            file::TieredWritableFile,
             footer::{AccountBlockFormat, AccountMetaFormat, TieredStorageFooter, FOOTER_SIZE},
             hot::{HotAccountMeta, HotStorageReader},
             index::{AccountIndexWriterEntry, IndexBlockFormat, IndexOffset},
@@ -886,7 +886,7 @@ pub mod tests {
         };
 
         {
-            let file = TieredStorageFile::new_writable(&path).unwrap();
+            let file = TieredWritableFile::new(&path).unwrap();
             expected_footer.write_footer_block(&file).unwrap();
         }
 
@@ -920,7 +920,7 @@ pub mod tests {
             ..TieredStorageFooter::default()
         };
         {
-            let file = TieredStorageFile::new_writable(&path).unwrap();
+            let file = TieredWritableFile::new(&path).unwrap();
             let mut current_offset = 0;
 
             account_offsets = hot_account_metas
@@ -963,7 +963,7 @@ pub mod tests {
         };
 
         {
-            let file = TieredStorageFile::new_writable(&path).unwrap();
+            let file = TieredWritableFile::new(&path).unwrap();
             footer.write_footer_block(&file).unwrap();
         }
 
@@ -1008,7 +1008,7 @@ pub mod tests {
             ..TieredStorageFooter::default()
         };
         {
-            let file = TieredStorageFile::new_writable(&path).unwrap();
+            let file = TieredWritableFile::new(&path).unwrap();
 
             let cursor = footer
                 .index_block_format
@@ -1051,7 +1051,7 @@ pub mod tests {
         };
 
         {
-            let file = TieredStorageFile::new_writable(&path).unwrap();
+            let file = TieredWritableFile::new(&path).unwrap();
 
             let mut owners_table = OwnersTable::default();
             addresses.iter().for_each(|owner_address| {
@@ -1113,7 +1113,7 @@ pub mod tests {
         let account_offsets: Vec<_>;
 
         {
-            let file = TieredStorageFile::new_writable(&path).unwrap();
+            let file = TieredWritableFile::new(&path).unwrap();
             let mut current_offset = 0;
 
             account_offsets = hot_account_metas
@@ -1231,7 +1231,7 @@ pub mod tests {
         };
 
         {
-            let file = TieredStorageFile::new_writable(&path).unwrap();
+            let file = TieredWritableFile::new(&path).unwrap();
             let mut current_offset = 0;
 
             // write accounts blocks
