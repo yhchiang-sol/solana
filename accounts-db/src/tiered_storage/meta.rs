@@ -124,10 +124,8 @@ impl AccountMetaOptionalFields {
     }
 }
 
-lazy_static! {
-    static ref MIN_ACCOUNT_ADDRESS: Pubkey = Pubkey::new_from_array([0x00u8; 32]);
-    static ref MAX_ACCOUNT_ADDRESS: Pubkey = Pubkey::new_from_array([0xFFu8; 32]);
-}
+const MIN_ACCOUNT_ADDRESS: Pubkey = Pubkey::new_from_array([0x00u8; 32]);
+const MAX_ACCOUNT_ADDRESS: Pubkey = Pubkey::new_from_array([0xFFu8; 32]);
 
 #[derive(Debug)]
 /// A struct that maintains an address-range using its min and max fields.
@@ -258,7 +256,7 @@ pub mod tests {
 
     #[test]
     fn test_pubkey_range_update_single() {
-        let address = Pubkey::new_unique();
+        let address = solana_sdk::pubkey::new_rand();
         let mut address_range = AccountAddressRange::default();
 
         address_range.update(&address);
@@ -279,7 +277,7 @@ pub mod tests {
 
         // Generate random addresses and track expected min and max indices
         for i in 0..NUM_PUBKEYS {
-            let address = Pubkey::new_unique();
+            let address = solana_sdk::pubkey::new_rand();
             addresses.push(address);
 
             // Update expected min and max indices
