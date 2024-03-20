@@ -269,6 +269,24 @@ impl<'a> Iterator for AccountsFileIter<'a> {
     }
 }
 
+pub trait WritableAccountsFileProvider {
+    fn new(path: &Path, file_size: u64) -> AccountsFile;
+}
+
+pub struct WritableAppendVecProvider;
+impl WritableAccountsFileProvider for WritableAppendVecProvider {
+    fn new(path: &Path, file_size: u64) -> AccountsFile {
+        AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize))
+    }
+}
+
+pub struct WritableHotStorageProvider;
+impl WritableAccountsFileProvider for WritableHotStorageProvider {
+    fn new(path: &Path, _file_size: u64) -> AccountsFile {
+        AccountsFile::TieredHot(TieredStorage::new_writable(&path))
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use crate::accounts_file::AccountsFile;

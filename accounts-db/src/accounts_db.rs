@@ -20,6 +20,7 @@
 
 #[cfg(feature = "dev-context-only-utils")]
 use qualifier_attr::qualifiers;
+
 use {
     crate::{
         account_info::{AccountInfo, StorageLocation},
@@ -32,7 +33,8 @@ use {
         },
         accounts_cache::{AccountsCache, CachedAccount, SlotCache},
         accounts_file::{
-            AccountsFile, AccountsFileError, MatchAccountOwnerError, ALIGN_BOUNDARY_OFFSET,
+            AccountsFile, AccountsFileError, MatchAccountOwnerError, WritableAccountsFileProvider,
+            WritableAppendVecProvider, ALIGN_BOUNDARY_OFFSET,
         },
         accounts_hash::{
             AccountHash, AccountsDeltaHash, AccountsHash, AccountsHashKind, AccountsHasher,
@@ -55,9 +57,7 @@ use {
         ancient_append_vecs::{
             get_ancient_append_vec_capacity, is_ancient, AccountsToStore, StorageSelector,
         },
-        append_vec::{
-            aligned_stored_size, AppendVec, APPEND_VEC_MMAPPED_FILES_OPEN, STORE_META_OVERHEAD,
-        },
+        append_vec::{aligned_stored_size, APPEND_VEC_MMAPPED_FILES_OPEN, STORE_META_OVERHEAD},
         cache_hash_data::{
             CacheHashData, CacheHashDataFileReference, DeletionPolicy as CacheHashDeletionPolicy,
         },
@@ -1031,10 +1031,15 @@ pub struct AccountStorageEntry {
 }
 
 impl AccountStorageEntry {
-    pub fn new(path: &Path, slot: Slot, id: AppendVecId, file_size: u64) -> Self {
+    pub fn new<T: WritableAccountsFileProvider>(
+        path: &Path,
+        slot: Slot,
+        id: AppendVecId,
+        file_size: u64,
+    ) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
-        let accounts = AccountsFile::AppendVec(AppendVec::new(&path, true, file_size as usize));
+        let accounts = T::new(&path, file_size);
 
         Self {
             id,
@@ -2511,7 +2516,7 @@ impl AccountsDb {
     }
 
     fn new_storage_entry(&self, slot: Slot, path: &Path, size: u64) -> AccountStorageEntry {
-        AccountStorageEntry::new(path, slot, self.next_id(), size)
+        AccountStorageEntry::new::<WritableAppendVecProvider>(path, slot, self.next_id(), size)
     }
 
     pub fn expected_cluster_type(&self) -> ClusterType {
@@ -6327,7 +6332,7 @@ impl AccountsDb {
         slot_stores: &HashMap<AppendVecId, Arc<AccountStorageEntry>>,
     ) -> Arc<AccountStorageEntry> {
         let size = slot_stores.values().map(|storage| storage.capacity()).sum();
-        let storage = AccountStorageEntry::new(path, slot, id, size);
+        let storage = AccountStorageEntry::new::<WritableAppendVecProvider>(path, slot, id, size);
 
         // get unique accounts, most recent version by write_version
         let mut accum = HashMap::<Pubkey, StoredAccountMeta<'_>>::default();
@@ -9505,7 +9510,7 @@ pub mod tests {
             accounts_hash::MERKLE_FANOUT,
             accounts_index::{tests::*, AccountSecondaryIndexesIncludeExclude},
             ancient_append_vecs,
-            append_vec::{test_utils::TempFile, AppendVecStoredAccountMeta},
+            append_vec::{test_utils::TempFile, AppendVec, AppendVecStoredAccountMeta},
             cache_hash_data::CacheHashDataFile,
             inline_spl_token,
         },
@@ -10544,7 +10549,12 @@ pub mod tests {
         let (_temp_dirs, paths) = get_temp_accounts_paths(1).unwrap();
         let slot_expected: Slot = 0;
         let size: usize = 123;
-        let data = AccountStorageEntry::new(&paths[0], slot_expected, 0, size as u64);
+        let data = AccountStorageEntry::new::<WritableAppendVecProvider>(
+            &paths[0],
+            slot_expected,
+            0,
+            size as u64,
+        );
 
         let arc = Arc::new(data);
         let storages = vec![arc];
@@ -10595,7 +10605,12 @@ pub mod tests {
         let (_temp_dirs, paths) = get_temp_accounts_paths(1).unwrap();
         let slot_expected: Slot = 0;
         let size: usize = 123;
-        let mut data = AccountStorageEntry::new(&paths[0], slot_expected, 0, size as u64);
+        let mut data = AccountStorageEntry::new::<WritableAppendVecProvider>(
+            &paths[0],
+            slot_expected,
+            0,
+            size as u64,
+        );
         let av = AccountsFile::AppendVec(AppendVec::new(&tf.path, true, 1024 * 1024));
         data.accounts = av;
 
@@ -10711,7 +10726,12 @@ pub mod tests {
         let (_temp_dirs, paths) = get_temp_accounts_paths(1).unwrap();
         let slot_expected: Slot = 0;
         let size: usize = 123;
-        let mut data = AccountStorageEntry::new(&paths[0], slot_expected, 0, size as u64);
+        let mut data = AccountStorageEntry::new::<WritableAppendVecProvider>(
+            &paths[0],
+            slot_expected,
+            0,
+            size as u64,
+        );
         let av = AccountsFile::AppendVec(AppendVec::new(&tf.path, true, 1024 * 1024));
         data.accounts = av;
 
@@ -10790,7 +10810,12 @@ pub mod tests {
         let (_temp_dirs, paths) = get_temp_accounts_paths(1).unwrap();
         let file_size = account_data_size.unwrap_or(123) * 100 / fill_percentage;
         let size_aligned: usize = aligned_stored_size(file_size as usize);
-        let mut data = AccountStorageEntry::new(&paths[0], slot, id, size_aligned as u64);
+        let mut data = AccountStorageEntry::new::<WritableAppendVecProvider>(
+            &paths[0],
+            slot,
+            id,
+            size_aligned as u64,
+        );
         let av = AccountsFile::AppendVec(AppendVec::new(
             &tf.path,
             true,
@@ -12894,7 +12919,7 @@ pub mod tests {
         let store_file_size = 2 * PAGE_SIZE;
 
         let store1_id = 22;
-        let store1 = Arc::new(AccountStorageEntry::new(
+        let store1 = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             slot_id_1,
             store1_id,
@@ -12907,7 +12932,7 @@ pub mod tests {
         let slot_id_2 = 13;
 
         let store2_id = 44;
-        let store2 = Arc::new(AccountStorageEntry::new(
+        let store2 = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             slot_id_2,
             store2_id,
@@ -12923,7 +12948,7 @@ pub mod tests {
 
         let slot_id_3 = 14;
         let store3_id = 55;
-        let entry3 = Arc::new(AccountStorageEntry::new(
+        let entry3 = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             slot_id_3,
             store3_id,
@@ -12967,7 +12992,7 @@ pub mod tests {
         let store_file_size = 2 * PAGE_SIZE;
 
         let store1_id = 22;
-        let store1 = Arc::new(AccountStorageEntry::new(
+        let store1 = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             slot_id_1,
             store1_id,
@@ -12979,7 +13004,7 @@ pub mod tests {
 
         let slot_id_2 = 13;
         let store2_id = 44;
-        let store2 = Arc::new(AccountStorageEntry::new(
+        let store2 = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             slot_id_2,
             store2_id,
@@ -12996,7 +13021,7 @@ pub mod tests {
 
         let slot_id_3 = 14;
         let store3_id = 55;
-        let entry3 = Arc::new(AccountStorageEntry::new(
+        let entry3 = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             slot_id_3,
             store3_id,
@@ -13033,7 +13058,7 @@ pub mod tests {
 
         let store_file_size = 4 * PAGE_SIZE;
         let store1_id = 22;
-        let store1 = Arc::new(AccountStorageEntry::new(
+        let store1 = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             slot1,
             store1_id,
@@ -13051,7 +13076,7 @@ pub mod tests {
 
         let store2_id = 44;
         let slot2 = 44;
-        let store2 = Arc::new(AccountStorageEntry::new(
+        let store2 = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             slot2,
             store2_id,
@@ -15063,11 +15088,16 @@ pub mod tests {
     #[test]
     fn test_shrink_productive() {
         solana_logger::setup();
-        let s1 = AccountStorageEntry::new(Path::new("."), 0, 0, 1024);
+        let s1 = AccountStorageEntry::new::<WritableAppendVecProvider>(Path::new("."), 0, 0, 1024);
         let store = Arc::new(s1);
         assert!(!AccountsDb::is_shrinking_productive(0, &store));
 
-        let s1 = AccountStorageEntry::new(Path::new("."), 0, 0, PAGE_SIZE * 4);
+        let s1 = AccountStorageEntry::new::<WritableAppendVecProvider>(
+            Path::new("."),
+            0,
+            0,
+            PAGE_SIZE * 4,
+        );
         let store = Arc::new(s1);
         store.add_account((3 * PAGE_SIZE as usize) - 1);
         store.add_account(10);
@@ -15085,7 +15115,7 @@ pub mod tests {
         let mut accounts = AccountsDb::new_single_for_tests();
         let common_store_path = Path::new("");
         let store_file_size = 2 * PAGE_SIZE;
-        let entry = Arc::new(AccountStorageEntry::new(
+        let entry = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             0,
             1,
@@ -17421,7 +17451,7 @@ pub mod tests {
         solana_logger::setup();
         let common_store_path = Path::new("");
         let store_file_size = 2 * PAGE_SIZE;
-        let entry = Arc::new(AccountStorageEntry::new(
+        let entry = Arc::new(AccountStorageEntry::new::<WritableAppendVecProvider>(
             common_store_path,
             0,
             1,
