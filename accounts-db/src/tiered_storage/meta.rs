@@ -261,8 +261,8 @@ pub mod tests {
 
         address_range.update(&address);
         // For a single update, the min and max should equal to the address
-        assert!(*address_range.min == address);
-        assert!(*address_range.max == address);
+        assert_eq!(*address_range.min, address);
+        assert_eq!(*address_range.max, address);
     }
 
     #[test]
