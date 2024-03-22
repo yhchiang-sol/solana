@@ -7,9 +7,7 @@ use {
         accounts_hash::AccountHash,
         append_vec::{AppendVec, AppendVecError},
         storable_accounts::StorableAccounts,
-        tiered_storage::{
-            error::TieredStorageError, hot::HOT_FORMAT, index::IndexOffset, TieredStorage,
-        },
+        tiered_storage::{error::TieredStorageError, index::IndexOffset, TieredStorage},
     },
     solana_sdk::{account::ReadableAccount, clock::Slot, pubkey::Pubkey},
     std::{
@@ -231,11 +229,7 @@ impl AccountsFile {
     ) -> Option<Vec<StoredAccountInfo>> {
         match self {
             Self::AppendVec(av) => av.append_accounts(accounts, skip),
-            // Currently we only support HOT_FORMAT.  If we later want to use
-            // a different format, then we will need a way to pass-in it.
-            // TODO: consider adding function like write_accounts_to_hot_storage() or something
-            // to hide implementation detail.
-            Self::TieredStorage(ts) => ts.write_accounts(accounts, skip, &HOT_FORMAT).ok(),
+            Self::TieredStorage(ts) => ts.write_accounts_to_hot_storage(accounts, skip).ok(),
         }
     }
 }

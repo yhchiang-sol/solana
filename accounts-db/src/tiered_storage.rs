@@ -143,6 +143,20 @@ impl TieredStorage {
         }
     }
 
+    pub fn write_accounts_to_hot_storage<
+        'a,
+        'b,
+        T: ReadableAccount + Sync,
+        U: StorableAccounts<'a, T>,
+        V: Borrow<AccountHash>,
+    >(
+        &self,
+        accounts: &StorableAccountsWithHashesAndWriteVersions<'a, 'b, T, U, V>,
+        skip: usize,
+    ) -> TieredStorageResult<Vec<StoredAccountInfo>> {
+        self.write_accounts(accounts, skip, &HOT_FORMAT)
+    }
+
     /// Returns the underlying reader of the TieredStorage.  None will be
     /// returned if it's is_read_only() returns false.
     pub fn reader(&self) -> Option<&TieredStorageReader> {
