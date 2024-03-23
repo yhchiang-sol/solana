@@ -16,7 +16,7 @@ use {
             mmap_utils::{get_pod, get_slice},
             owners::{OwnerOffset, OwnersBlockFormat, OwnersTable, OWNER_NO_OWNER},
             StorableAccounts, StorableAccountsWithHashesAndWriteVersions, TieredStorageError,
-            TieredStorageFormat, TieredStorageResult, MAX_TIERED_STORAGE_FILE_SIZE,
+            TieredStorageFormat, TieredStorageResult,
         },
     },
     bytemuck::{Pod, Zeroable},
@@ -370,9 +370,6 @@ impl HotStorageReader {
     }
 
     pub fn capacity(&self) -> u64 {
-        if self.is_empty() {
-            return MAX_TIERED_STORAGE_FILE_SIZE;
-        }
         self.len() as u64
     }
 
