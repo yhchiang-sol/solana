@@ -61,7 +61,8 @@ impl AccountStorage {
         lookup_in_map()
             .or_else(|| {
                 self.shrink_in_progress_map.get(&slot).and_then(|entry| {
-                    (entry.value().append_vec_id() == store_id).then(|| Arc::clone(entry.value()))
+                    (entry.value().accounts_file_id() == store_id)
+                        .then(|| Arc::clone(entry.value()))
                 })
             })
             .or_else(lookup_in_map)
@@ -139,7 +140,7 @@ impl AccountStorage {
             .insert(
                 slot,
                 AccountStorageReference {
-                    id: store.append_vec_id(),
+                    id: store.accounts_file_id(),
                     storage: store,
                 }
             )
@@ -236,11 +237,11 @@ impl<'a> Drop for ShrinkInProgress<'a> {
                     self.slot,
                     AccountStorageReference {
                         storage: Arc::clone(&self.new_store),
-                        id: self.new_store.append_vec_id()
+                        id: self.new_store.accounts_file_id()
                     }
                 )
                 .map(|store| store.id),
-            Some(self.old_store.append_vec_id())
+            Some(self.old_store.accounts_file_id())
         );
 
         // The new store can be removed from 'shrink_in_progress_map'
@@ -475,7 +476,7 @@ pub(crate) mod tests {
         assert!(storage.map.contains_key(&slot));
         assert_eq!(
             id_to_shrink,
-            storage.map.get(&slot).unwrap().storage.append_vec_id()
+            storage.map.get(&slot).unwrap().storage.accounts_file_id()
         );
         assert_eq!(
             (slot, id_shrunk),
@@ -483,14 +484,14 @@ pub(crate) mod tests {
                 .shrink_in_progress_map
                 .iter()
                 .next()
-                .map(|r| (*r.key(), r.value().append_vec_id()))
+                .map(|r| (*r.key(), r.value().accounts_file_id()))
                 .unwrap()
         );
         drop(shrinking_in_progress);
         assert!(storage.map.contains_key(&slot));
         assert_eq!(
             id_shrunk,
-            storage.map.get(&slot).unwrap().storage.append_vec_id()
+            storage.map.get(&slot).unwrap().storage.accounts_file_id()
         );
         assert!(storage.shrink_in_progress_map.is_empty());
         storage.shrinking_in_progress(slot, sample);
@@ -520,7 +521,7 @@ pub(crate) mod tests {
         // verify data structures during and after shrink and then with subsequent shrink call
         let storage = AccountStorage::default();
         let sample = storage.get_test_storage();
-        let id = sample.append_vec_id();
+        let id = sample.accounts_file_id();
         let missing_id = 9999;
         let slot = sample.slot();
         // id is missing since not in maps at all

@@ -297,7 +297,7 @@ mod tests {
             assert!(
                 (slot != 2 && slot != 4)
                     ^ storage
-                        .map(|storage| storage.append_vec_id() == (slot as AccountsFileId))
+                        .map(|storage| storage.accounts_file_id() == (slot as AccountsFileId))
                         .unwrap_or(false),
                 "slot: {slot}, storage: {storage:?}"
             );
@@ -435,8 +435,8 @@ mod tests {
         assert_eq!(result.slot_count(), 1);
         assert_eq!(result.storages.len(), 1);
         assert_eq!(
-            result.get(slot).unwrap().append_vec_id(),
-            store.append_vec_id()
+            result.get(slot).unwrap().accounts_file_id(),
+            store.accounts_file_id()
         );
     }
 
@@ -474,12 +474,12 @@ mod tests {
         assert!(result.get(6).is_none());
         assert!(result.get(8).is_none());
         assert_eq!(
-            result.get(slots[0]).unwrap().append_vec_id(),
-            store.append_vec_id()
+            result.get(slots[0]).unwrap().accounts_file_id(),
+            store.accounts_file_id()
         );
         assert_eq!(
-            result.get(slots[1]).unwrap().append_vec_id(),
-            store2.append_vec_id()
+            result.get(slots[1]).unwrap().accounts_file_id(),
+            store2.accounts_file_id()
         );
     }
 }

@@ -1115,7 +1115,7 @@ impl AccountStorageEntry {
         self.slot
     }
 
-    pub fn append_vec_id(&self) -> AccountsFileId {
+    pub fn accounts_file_id(&self) -> AccountsFileId {
         self.id
     }
 
@@ -1176,7 +1176,7 @@ impl AccountStorageEntry {
             count > 0,
             "double remove of account in slot: {}/store: {}!!",
             self.slot(),
-            self.append_vec_id(),
+            self.accounts_file_id(),
         );
 
         self.alive_bytes.fetch_sub(num_bytes, Ordering::SeqCst);
@@ -1299,7 +1299,7 @@ pub struct AccountsDb {
     /// distribute the accounts across storage lists
     pub next_id: AtomicAccountsFileId,
 
-    /// Set of shrinkable stores organized by map of slot to append_vec_id
+    /// Set of shrinkable stores organized by map of slot to accounts_file_id
     pub shrink_candidate_slots: Mutex<ShrinkCandidates>,
 
     pub write_version: AtomicU64,
@@ -3692,7 +3692,7 @@ impl AccountsDb {
                         dead += 1;
                     } else {
                         // Hold onto the index entry arc so that it cannot be flushed.
-                        // Since we are shrinking these entries, we need to disambiguate append_vec_ids during this period and those only exist in the in-memory accounts index.
+                        // Since we are shrinking these entries, we need to disambiguate accounts_file_ids during this period and those only exist in the in-memory accounts index.
                         index_entries_being_shrunk.push(Arc::clone(entry.unwrap()));
                         all_are_zero_lamports &= stored_account.lamports() == 0;
                         alive_accounts.add(ref_count, stored_account, slot_list);
@@ -4155,7 +4155,7 @@ impl AccountsDb {
             let store = &usage.store;
             let alive_ratio = (total_alive_bytes as f64) / (total_bytes as f64);
             debug!("alive_ratio: {:?} store_id: {:?}, store_ratio: {:?} requirement: {:?}, total_bytes: {:?} total_alive_bytes: {:?}",
-                alive_ratio, usage.store.append_vec_id(), usage.alive_ratio, shrink_ratio, total_bytes, total_alive_bytes);
+                alive_ratio, usage.store.accounts_file_id(), usage.alive_ratio, shrink_ratio, total_bytes, total_alive_bytes);
             if alive_ratio > shrink_ratio {
                 // we have reached our goal, stop
                 debug!(
@@ -5475,7 +5475,7 @@ impl AccountsDb {
 
         debug!(
             "creating store: {} slot: {} len: {} size: {} from: {} path: {:?}",
-            store.append_vec_id(),
+            store.accounts_file_id(),
             slot,
             store.accounts.len(),
             store.accounts.capacity(),
@@ -5992,7 +5992,7 @@ impl AccountsDb {
                 continue;
             }
 
-            let store_id = storage.append_vec_id();
+            let store_id = storage.accounts_file_id();
             for (i, stored_account_info) in rvs.unwrap().into_iter().enumerate() {
                 storage.add_account(stored_account_info.size);
 
@@ -8803,7 +8803,7 @@ impl AccountsDb {
                             // no storage at this slot, no information to pull out
                             continue;
                         };
-                        let store_id = storage.append_vec_id();
+                        let store_id = storage.accounts_file_id();
 
                         scan_time.stop();
                         scan_time_sum += scan_time.as_us();
@@ -9136,7 +9136,7 @@ impl AccountsDb {
         // store count and size for each storage
         let mut storage_size_storages_time = Measure::start("storage_size_storages");
         for (_slot, store) in self.storage.iter() {
-            let id = store.append_vec_id();
+            let id = store.accounts_file_id();
             // Should be default at this point
             assert_eq!(store.alive_bytes(), 0);
             if let Some(entry) = stored_sizes_and_counts.get(&id) {
@@ -9200,7 +9200,7 @@ impl AccountsDb {
             info!(
                 "  slot: {} id: {} count_and_status: {:?} approx_store_count: {} len: {} capacity: {}",
                 slot,
-                entry.append_vec_id(),
+                entry.accounts_file_id(),
                 entry.count_and_status.read(),
                 entry.approx_store_count.load(Ordering::Relaxed),
                 entry.accounts.len(),
@@ -9612,8 +9612,8 @@ pub mod tests {
 
     impl CurrentAncientAppendVec {
         /// note this requires that 'slot_and_append_vec' is Some
-        fn append_vec_id(&self) -> AccountsFileId {
-            self.append_vec().append_vec_id()
+        fn accounts_file_id(&self) -> AccountsFileId {
+            self.append_vec().accounts_file_id()
         }
     }
 
@@ -10122,7 +10122,7 @@ pub mod tests {
             .into_iter()
             .map(|slot| {
                 let storage = db.storage.get_slot_storage_entry(slot).unwrap();
-                (storage.append_vec_id(), storage)
+                (storage.accounts_file_id(), storage)
             })
             .collect::<HashMap<_, _>>();
         let new_storage =
@@ -10687,7 +10687,10 @@ pub mod tests {
 
         if let Some(index) = add_to_index {
             let account_info = AccountInfo::new(
-                StorageLocation::AppendVec(storage.append_vec_id(), stored_accounts_info[0].offset),
+                StorageLocation::AppendVec(
+                    storage.accounts_file_id(),
+                    stored_accounts_info[0].offset,
+                ),
                 account.lamports(),
             );
             index.upsert(
@@ -11393,7 +11396,7 @@ pub mod tests {
                 .storage
                 .get_slot_storage_entry(0)
                 .unwrap()
-                .append_vec_id(),
+                .accounts_file_id(),
             id
         );
 
@@ -13309,7 +13312,7 @@ pub mod tests {
 
     #[test]
     #[should_panic(expected = "We've run out of storage ids!")]
-    fn test_wrapping_append_vec_id() {
+    fn test_wrapping_accounts_file_id() {
         let db = AccountsDb::new_single_for_tests();
 
         let zero_lamport_account =
@@ -13335,7 +13338,7 @@ pub mod tests {
 
     #[test]
     #[should_panic(expected = "We've run out of storage ids!")]
-    fn test_reuse_append_vec_id() {
+    fn test_reuse_accounts_file_id() {
         solana_logger::setup();
         let db = AccountsDb::new_single_for_tests();
 
@@ -15254,7 +15257,7 @@ pub mod tests {
         accounts.set_storage_count_and_alive_bytes(dashmap, &mut GenerateIndexTimings::default());
         assert_eq!(accounts.storage.len(), 1);
         for (_, store) in accounts.storage.iter() {
-            assert_eq!(store.append_vec_id(), 0);
+            assert_eq!(store.accounts_file_id(), 0);
             assert_eq!(store.count_and_status.read().0, count);
             assert_eq!(store.alive_bytes.load(Ordering::Acquire), 2);
         }
@@ -15752,15 +15755,15 @@ pub mod tests {
             let db = AccountsDb::new_single_for_tests();
             let size = 1;
             let existing_store = db.create_and_insert_store(slot, size, "test");
-            let old_id = existing_store.append_vec_id();
+            let old_id = existing_store.accounts_file_id();
             let dead_storages = db.mark_dirty_dead_stores(slot, add_dirty_stores, None, false);
             assert!(db.storage.get_slot_storage_entry(slot).is_none());
             assert_eq!(dead_storages.len(), 1);
-            assert_eq!(dead_storages.first().unwrap().append_vec_id(), old_id);
+            assert_eq!(dead_storages.first().unwrap().accounts_file_id(), old_id);
             if add_dirty_stores {
                 assert_eq!(1, db.dirty_stores.len());
                 let dirty_store = db.dirty_stores.get(&slot).unwrap();
-                assert_eq!(dirty_store.append_vec_id(), old_id);
+                assert_eq!(dirty_store.accounts_file_id(), old_id);
             } else {
                 assert!(db.dirty_stores.is_empty());
             }
@@ -15777,17 +15780,17 @@ pub mod tests {
             let db = AccountsDb::new_single_for_tests();
             let size = 1;
             let old_store = db.create_and_insert_store(slot, size, "test");
-            let old_id = old_store.append_vec_id();
+            let old_id = old_store.accounts_file_id();
             let shrink_in_progress = db.get_store_for_shrink(slot, 100);
             let dead_storages =
                 db.mark_dirty_dead_stores(slot, add_dirty_stores, Some(shrink_in_progress), false);
             assert!(db.storage.get_slot_storage_entry(slot).is_some());
             assert_eq!(dead_storages.len(), 1);
-            assert_eq!(dead_storages.first().unwrap().append_vec_id(), old_id);
+            assert_eq!(dead_storages.first().unwrap().accounts_file_id(), old_id);
             if add_dirty_stores {
                 assert_eq!(1, db.dirty_stores.len());
                 let dirty_store = db.dirty_stores.get(&slot).unwrap();
-                assert_eq!(dirty_store.append_vec_id(), old_id);
+                assert_eq!(dirty_store.accounts_file_id(), old_id);
             } else {
                 assert!(db.dirty_stores.is_empty());
             }
@@ -16398,15 +16401,21 @@ pub mod tests {
             let append_vec = db.create_and_insert_store(slot, size, "test");
             let mut current_ancient = CurrentAncientAppendVec::new(slot, append_vec.clone());
             assert_eq!(current_ancient.slot(), slot);
-            assert_eq!(current_ancient.append_vec_id(), append_vec.append_vec_id());
             assert_eq!(
-                current_ancient.append_vec().append_vec_id(),
-                append_vec.append_vec_id()
+                current_ancient.accounts_file_id(),
+                append_vec.accounts_file_id()
+            );
+            assert_eq!(
+                current_ancient.append_vec().accounts_file_id(),
+                append_vec.accounts_file_id()
             );
 
             let _shrink_in_progress = current_ancient.create_if_necessary(slot2, &db, 0);
             assert_eq!(current_ancient.slot(), slot);
-            assert_eq!(current_ancient.append_vec_id(), append_vec.append_vec_id());
+            assert_eq!(
+                current_ancient.accounts_file_id(),
+                append_vec.accounts_file_id()
+            );
         }
 
         {
@@ -16417,14 +16426,14 @@ pub mod tests {
 
             let mut current_ancient = CurrentAncientAppendVec::default();
             let mut _shrink_in_progress = current_ancient.create_if_necessary(slot2, &db, 0);
-            let id = current_ancient.append_vec_id();
+            let id = current_ancient.accounts_file_id();
             assert_eq!(current_ancient.slot(), slot2);
             assert!(is_ancient(&current_ancient.append_vec().accounts));
             let slot3 = 3;
             // should do nothing
             let _shrink_in_progress = current_ancient.create_if_necessary(slot3, &db, 0);
             assert_eq!(current_ancient.slot(), slot2);
-            assert_eq!(current_ancient.append_vec_id(), id);
+            assert_eq!(current_ancient.accounts_file_id(), id);
             assert!(is_ancient(&current_ancient.append_vec().accounts));
         }
 
@@ -16438,7 +16447,7 @@ pub mod tests {
             {
                 let _shrink_in_progress = current_ancient.create_ancient_append_vec(slot2, &db, 0);
             }
-            let id = current_ancient.append_vec_id();
+            let id = current_ancient.accounts_file_id();
             assert_eq!(current_ancient.slot(), slot2);
             assert!(is_ancient(&current_ancient.append_vec().accounts));
 
@@ -16448,7 +16457,7 @@ pub mod tests {
             let mut _shrink_in_progress = current_ancient.create_ancient_append_vec(slot3, &db, 0);
             assert_eq!(current_ancient.slot(), slot3);
             assert!(is_ancient(&current_ancient.append_vec().accounts));
-            assert_ne!(current_ancient.append_vec_id(), id);
+            assert_ne!(current_ancient.accounts_file_id(), id);
         }
     }
 
@@ -17188,7 +17197,7 @@ pub mod tests {
             if let Some(storage) = db.get_storage_for_slot(slot) {
                 storage.accounts.account_iter().for_each(|account| {
                     let info = AccountInfo::new(
-                        StorageLocation::AppendVec(storage.append_vec_id(), account.offset()),
+                        StorageLocation::AppendVec(storage.accounts_file_id(), account.offset()),
                         account.lamports(),
                     );
                     db.accounts_index.upsert(
@@ -17235,7 +17244,7 @@ pub mod tests {
         let starting_id = db
             .storage
             .iter()
-            .map(|storage| storage.1.append_vec_id())
+            .map(|storage| storage.1.accounts_file_id())
             .max()
             .unwrap_or(999);
         for (i, account_data_size) in account_data_sizes.iter().enumerate().take(num_slots) {
@@ -17284,7 +17293,7 @@ pub mod tests {
         let starting_id = db
             .storage
             .iter()
-            .map(|storage| storage.1.append_vec_id())
+            .map(|storage| storage.1.accounts_file_id())
             .max()
             .unwrap_or(999);
         for i in 0..num_slots {
@@ -17470,7 +17479,10 @@ pub mod tests {
         // should have kept the same 'current_ancient'
         assert_eq!(current_ancient.slot(), slot5);
         assert_eq!(current_ancient.append_vec().slot(), slot5);
-        assert_eq!(current_ancient.append_vec_id(), storage.append_vec_id());
+        assert_eq!(
+            current_ancient.accounts_file_id(),
+            storage.accounts_file_id()
+        );
 
         // slot is not ancient, so it is good to move
         assert!(should_move);
@@ -17491,7 +17503,10 @@ pub mod tests {
             CAN_RANDOMLY_SHRINK_FALSE,
         );
         assert!(!should_move);
-        assert_eq!(current_ancient.append_vec_id(), ancient1.append_vec_id());
+        assert_eq!(
+            current_ancient.accounts_file_id(),
+            ancient1.accounts_file_id()
+        );
         assert_eq!(current_ancient.slot(), slot1_ancient);
 
         // current is ancient1
@@ -17512,7 +17527,10 @@ pub mod tests {
             CAN_RANDOMLY_SHRINK_FALSE,
         );
         assert!(!should_move);
-        assert_eq!(current_ancient.append_vec_id(), ancient2.append_vec_id());
+        assert_eq!(
+            current_ancient.accounts_file_id(),
+            ancient2.accounts_file_id()
+        );
         assert_eq!(current_ancient.slot(), slot2_ancient);
 
         // now try a full ancient append vec
@@ -17530,8 +17548,8 @@ pub mod tests {
         );
         assert!(!should_move);
         assert_eq!(
-            current_ancient.append_vec_id(),
-            full_ancient_3.new_storage().append_vec_id()
+            current_ancient.accounts_file_id(),
+            full_ancient_3.new_storage().accounts_file_id()
         );
         assert_eq!(current_ancient.slot(), slot3_full_ancient);
 
@@ -17545,8 +17563,8 @@ pub mod tests {
         );
         assert!(!should_move);
         assert_eq!(
-            current_ancient.append_vec_id(),
-            full_ancient_3.new_storage().append_vec_id()
+            current_ancient.accounts_file_id(),
+            full_ancient_3.new_storage().accounts_file_id()
         );
         assert_eq!(current_ancient.slot(), slot3_full_ancient);
 
@@ -17574,7 +17592,10 @@ pub mod tests {
             CAN_RANDOMLY_SHRINK_FALSE,
         );
         assert!(should_move);
-        assert_eq!(current_ancient.append_vec_id(), ancient1.append_vec_id());
+        assert_eq!(
+            current_ancient.accounts_file_id(),
+            ancient1.accounts_file_id()
+        );
         assert_eq!(current_ancient.slot(), slot1_ancient);
     }
 
