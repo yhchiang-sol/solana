@@ -119,7 +119,7 @@ impl AccountsFile {
     }
 
     /// Return (account metadata, next_index) pair for the account at the
-    /// specified `index` if any.  Otherwise return None.   Also return the
+    /// specified `offset` if any.  Otherwise return None.   Also return the
     /// index of the next entry.
     pub fn get_account(&self, offset: usize) -> Option<(StoredAccountMeta<'_>, usize)> {
         match self {
