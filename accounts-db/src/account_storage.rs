@@ -297,14 +297,14 @@ pub(crate) mod tests {
             slot,
             id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
         let entry2 = Arc::new(AccountStorageEntry::new(
             common_store_path,
             slot,
             id,
             store_file_size2,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
         storage
             .map
@@ -355,7 +355,7 @@ pub(crate) mod tests {
                 slot,
                 id,
                 store_file_size,
-                &AccountsFileProvider::AppendVec,
+                AccountsFileProvider::AppendVec,
             ))
         }
         fn get_test_storage(&self) -> Arc<AccountStorageEntry> {

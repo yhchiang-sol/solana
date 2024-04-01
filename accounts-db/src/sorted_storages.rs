@@ -450,7 +450,7 @@ mod tests {
             slot,
             id,
             size as u64,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         );
         let av = AccountsFile::AppendVec(AppendVec::new(&tf.path, true, 1024 * 1024));
         data.accounts = av;

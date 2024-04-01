@@ -1037,7 +1037,7 @@ impl AccountStorageEntry {
         slot: Slot,
         id: AccountsFileId,
         file_size: u64,
-        provider: &AccountsFileProvider,
+        provider: AccountsFileProvider,
     ) -> Self {
         let tail = AccountsFile::file_name(slot, id);
         let path = Path::new(path).join(tail);
@@ -2526,7 +2526,7 @@ impl AccountsDb {
             slot,
             self.next_id(),
             size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         )
     }
 
@@ -10503,7 +10503,7 @@ pub mod tests {
             slot_expected,
             0,
             size as u64,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         );
 
         let arc = Arc::new(data);
@@ -10560,7 +10560,7 @@ pub mod tests {
             slot_expected,
             0,
             size as u64,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         );
         let av = AccountsFile::AppendVec(AppendVec::new(&tf.path, true, 1024 * 1024));
         data.accounts = av;
@@ -10682,7 +10682,7 @@ pub mod tests {
             slot_expected,
             0,
             size as u64,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         );
         let av = AccountsFile::AppendVec(AppendVec::new(&tf.path, true, 1024 * 1024));
         data.accounts = av;
@@ -10767,7 +10767,7 @@ pub mod tests {
             slot,
             id,
             size_aligned as u64,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         );
         let av = AccountsFile::AppendVec(AppendVec::new(
             &tf.path,
@@ -12877,7 +12877,7 @@ pub mod tests {
             slot_id_1,
             store1_id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
         store1.alive_bytes.store(0, Ordering::Release);
 
@@ -12891,7 +12891,7 @@ pub mod tests {
             slot_id_2,
             store2_id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
 
         // The store2's alive_ratio is 0.5: as its page aligned alive size is 1 page.
@@ -12908,7 +12908,7 @@ pub mod tests {
             slot_id_3,
             store3_id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
 
         db.storage.insert(slot_id_1, Arc::clone(&store1));
@@ -12953,7 +12953,7 @@ pub mod tests {
             slot_id_1,
             store1_id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
         store1.alive_bytes.store(0, Ordering::Release);
         db.storage.insert(slot_id_1, Arc::clone(&store1));
@@ -12966,7 +12966,7 @@ pub mod tests {
             slot_id_2,
             store2_id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
         db.storage.insert(slot_id_2, Arc::clone(&store2));
 
@@ -12984,7 +12984,7 @@ pub mod tests {
             slot_id_3,
             store3_id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
 
         // The store3's alive ratio is 1.0 as its page-aligned alive size is 2 pages
@@ -13022,7 +13022,7 @@ pub mod tests {
             slot1,
             store1_id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
 
         // store1 has 1 page-aligned alive bytes, its alive ratio is 1/4: 0.25
@@ -13041,7 +13041,7 @@ pub mod tests {
             slot2,
             store2_id,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
 
         // store2 has 2 page-aligned bytes, its alive ratio is 2/4: 0.5
@@ -15050,7 +15050,7 @@ pub mod tests {
     fn test_shrink_productive() {
         solana_logger::setup();
         let s1 =
-            AccountStorageEntry::new(Path::new("."), 0, 0, 1024, &AccountsFileProvider::AppendVec);
+            AccountStorageEntry::new(Path::new("."), 0, 0, 1024, AccountsFileProvider::AppendVec);
         let store = Arc::new(s1);
         assert!(!AccountsDb::is_shrinking_productive(0, &store));
 
@@ -15059,7 +15059,7 @@ pub mod tests {
             0,
             0,
             PAGE_SIZE * 4,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         );
         let store = Arc::new(s1);
         store.add_account((3 * PAGE_SIZE as usize) - 1);
@@ -15083,7 +15083,7 @@ pub mod tests {
             0,
             1,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
         match accounts.shrink_ratio {
             AccountShrinkThreshold::TotalSpace { shrink_ratio } => {
@@ -17420,7 +17420,7 @@ pub mod tests {
             0,
             1,
             store_file_size,
-            &AccountsFileProvider::AppendVec,
+            AccountsFileProvider::AppendVec,
         ));
         let db = AccountsDb::new_single_for_tests();
         let slot0 = 0;
