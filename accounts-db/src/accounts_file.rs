@@ -224,6 +224,7 @@ impl<'a> Iterator for AccountsFileIter<'a> {
 }
 
 /// An enum that creates AccountsFile instance with the specified format.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum AccountsFileProvider {
     AppendVec,
     HotStorage,
